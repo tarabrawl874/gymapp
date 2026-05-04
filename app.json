@@ -3,6 +3,7 @@
     "name": "GymApp",
     "slug": "gym-app",
     "version": "1.0.2",
+    "note":"darkmode",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
