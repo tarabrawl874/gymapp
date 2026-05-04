@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "GymApp",
-    "slug": "gymapp",
+    "slug": "gym-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
