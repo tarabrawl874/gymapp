@@ -47,7 +47,7 @@ function AppContent() {
       {/* Tabs */}
       <View style={[styles.tabs, { backgroundColor: colors.card, borderBottomColor: colors.border, borderBottomWidth: 0.5 }]}>
         {["routines", "weights", "exercises"].map((tab) => {
-          const labels: Record<string, string> = { routines: "Rutinas", weights: "Pesos", exercises: "Ejercicios" };
+          const labels: Record<string, string> = { routines: "Rutinas", weights: "Pesos", exercises: "Próximamente" };
           const isActive = activeTab === tab;
           return (
             <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={[styles.tabItem, isActive && { borderBottomWidth: 2, borderBottomColor: colors.button }]}>
