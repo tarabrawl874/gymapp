@@ -67,26 +67,18 @@ export function WeightLogger() {
     load();
   }, []);
 
-  // BackHandler para el modal de editar
   useEffect(() => {
     const backAction = () => {
-      if (editModal) {
-        setEditModal(false);
-        return true;
-      }
+      if (editModal) { setEditModal(false); return true; }
       return false;
     };
     const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
     return () => backHandler.remove();
   }, [editModal]);
 
-  // BackHandler para el modal de actualizar
   useEffect(() => {
     const backAction = () => {
-      if (updateModal) {
-        setUpdateModal(false);
-        return true;
-      }
+      if (updateModal) { setUpdateModal(false); return true; }
       return false;
     };
     const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
@@ -102,14 +94,12 @@ export function WeightLogger() {
     if (!exercise || !weight || !date) return;
     const isoDate = toISO(date);
     if (!isoDate) return;
-
     const newEntry: WeightEntry = {
       id: Date.now().toString(),
       exercise,
       weight: parseFloat(weight),
       date: isoDate,
     };
-
     save([newEntry, ...entries]);
     setExercise("");
     setWeight("");
@@ -127,14 +117,12 @@ export function WeightLogger() {
     if (!selected || !newWeight) return;
     const isoDate = toISO(newDate);
     if (!isoDate) return;
-
     const newEntry: WeightEntry = {
       id: Date.now().toString(),
       exercise: selected.exercise,
       weight: parseFloat(newWeight),
       date: isoDate,
     };
-
     save([newEntry, ...entries]);
     setUpdateModal(false);
   };
@@ -150,15 +138,17 @@ export function WeightLogger() {
     if (!selected) return;
     const isoDate = toISO(editDate);
     if (!isoDate) return;
-
     const updated = entries.map((e) =>
       e.id === selected.id
         ? { ...e, weight: parseFloat(editWeight), date: isoDate }
         : e
     );
-
     save(updated);
     setEditModal(false);
+  };
+
+  const deleteEntry = (id: string) => {
+    save(entries.filter((e) => e.id !== id));
   };
 
   const getProgress = (list: WeightEntry[]) => {
@@ -187,40 +177,40 @@ export function WeightLogger() {
   return (
     <ScrollView style={{ flex: 1, padding: 10 }}>
 
-      {/* FORM */}
       <View style={styles.card}>
         <Text style={styles.title}>Registrar peso</Text>
-
         <TextInput
           style={styles.input}
           placeholder="Ejercicio"
+          placeholderTextColor="#999"
           value={exercise}
           onChangeText={setExercise}
+          color="#000"
         />
-
         <TextInput
           style={styles.input}
-          placeholder="Peso"
+          placeholder="Peso (kg)"
+          placeholderTextColor="#999"
           keyboardType="numeric"
           value={weight}
           onChangeText={setWeight}
+          color="#000"
         />
-
         <TextInput
           style={styles.input}
           value={date}
           onChangeText={(text) => setDate(formatDateInput(text))}
           placeholder="DD/MM/AA"
+          placeholderTextColor="#999"
           keyboardType="number-pad"
           maxLength={8}
+          color="#000"
         />
-
         <TouchableOpacity style={styles.button} onPress={addEntry}>
           <Text style={{ color: "white" }}>Añadir</Text>
         </TouchableOpacity>
       </View>
 
-      {/* LISTA */}
       {Array.from(grouped.entries()).map(([exercise, list]) => {
         const sorted = [...list].sort(
           (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
@@ -233,80 +223,80 @@ export function WeightLogger() {
           <View key={exercise} style={styles.card}>
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
               <View>
-                <Text style={{ fontWeight: "bold", fontSize: 16 }}>{exercise}</Text>
+                <Text style={{ fontWeight: "bold", fontSize: 16, color: "#000" }}>{exercise}</Text>
                 <Text style={{ color: "green" }}>+{progress}%</Text>
               </View>
-
               <View style={{ flexDirection: "row" }}>
                 <TouchableOpacity onPress={() => openUpdate(exercise)}>
-                  <MaterialCommunityIcons name="plus-circle-outline" size={22} />
+                  <MaterialCommunityIcons name="plus-circle-outline" size={22} color="#1f2937" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => toggle(exercise)} style={{ marginLeft: 10 }}>
-                  <MaterialCommunityIcons
-                    name={open ? "chevron-up" : "chevron-down"}
-                    size={22}
-                  />
+                  <MaterialCommunityIcons name={open ? "chevron-up" : "chevron-down"} size={22} color="#1f2937" />
                 </TouchableOpacity>
               </View>
             </View>
 
             {lastTwo.map((e) => (
-              <View
-                key={e.id}
-                style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}
-              >
+              <View key={e.id} style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
                 <View>
-                  <Text>{e.weight} kg</Text>
-                  <Text style={{ fontSize: 12 }}>{toSpanish(e.date)}</Text>
+                  <Text style={{ color: "#000" }}>{e.weight} kg</Text>
+                  <Text style={{ fontSize: 12, color: "#555" }}>{toSpanish(e.date)}</Text>
                 </View>
-                <TouchableOpacity onPress={() => openEdit(e)}>
-                  <MaterialCommunityIcons name="pencil-outline" size={20} />
-                </TouchableOpacity>
+                <View style={{ flexDirection: "row" }}>
+                  <TouchableOpacity onPress={() => openEdit(e)} style={{ marginRight: 10 }}>
+                    <MaterialCommunityIcons name="pencil-outline" size={20} color="#555" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => deleteEntry(e.id)}>
+                    <MaterialCommunityIcons name="trash-can-outline" size={20} color="#555" />
+                  </TouchableOpacity>
+                </View>
               </View>
             ))}
 
-            {open &&
-              sorted.slice(2).map((e) => (
-                <View
-                  key={e.id}
-                  style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}
-                >
-                  <View>
-                    <Text>{e.weight} kg</Text>
-                    <Text style={{ fontSize: 12 }}>{toSpanish(e.date)}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => openEdit(e)}>
-                    <MaterialCommunityIcons name="pencil-outline" size={20} />
+            {open && sorted.slice(2).map((e) => (
+              <View key={e.id} style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
+                <View>
+                  <Text style={{ color: "#000" }}>{e.weight} kg</Text>
+                  <Text style={{ fontSize: 12, color: "#555" }}>{toSpanish(e.date)}</Text>
+                </View>
+                <View style={{ flexDirection: "row" }}>
+                  <TouchableOpacity onPress={() => openEdit(e)} style={{ marginRight: 10 }}>
+                    <MaterialCommunityIcons name="pencil-outline" size={20} color="#555" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => deleteEntry(e.id)}>
+                    <MaterialCommunityIcons name="trash-can-outline" size={20} color="#555" />
                   </TouchableOpacity>
                 </View>
-              ))}
+              </View>
+            ))}
           </View>
         );
       })}
 
-      {/* MODAL EDITAR */}
       <Modal visible={editModal} transparent onRequestClose={() => setEditModal(false)}>
         <View style={styles.modalBg}>
           <View style={styles.modal}>
-
             <TouchableOpacity onPress={() => setEditModal(false)} style={{ marginBottom: 10 }}>
-              <MaterialCommunityIcons name="arrow-left" size={24} />
+              <MaterialCommunityIcons name="arrow-left" size={24} color="#1f2937" />
             </TouchableOpacity>
-
             <TextInput
               style={styles.input}
               value={editWeight}
               onChangeText={setEditWeight}
               keyboardType="numeric"
               placeholder="Peso (kg)"
+              placeholderTextColor="#999"
+              color="#000"
             />
             <TextInput
               style={styles.input}
               value={editDate}
               onChangeText={(text) => setEditDate(formatDateInput(text))}
               placeholder="DD/MM/AA"
+              placeholderTextColor="#999"
               keyboardType="number-pad"
               maxLength={8}
+              color="#000"
             />
             <TouchableOpacity style={styles.button} onPress={saveEdit}>
               <Text style={{ color: "white" }}>Guardar</Text>
@@ -315,29 +305,30 @@ export function WeightLogger() {
         </View>
       </Modal>
 
-      {/* MODAL ACTUALIZAR */}
       <Modal visible={updateModal} transparent onRequestClose={() => setUpdateModal(false)}>
         <View style={styles.modalBg}>
           <View style={styles.modal}>
-
             <TouchableOpacity onPress={() => setUpdateModal(false)} style={{ marginBottom: 10 }}>
-              <MaterialCommunityIcons name="arrow-left" size={24} />
+              <MaterialCommunityIcons name="arrow-left" size={24} color="#1f2937" />
             </TouchableOpacity>
-
             <TextInput
               style={styles.input}
               placeholder="Nuevo peso (kg)"
+              placeholderTextColor="#999"
               value={newWeight}
               onChangeText={setNewWeight}
               keyboardType="numeric"
+              color="#000"
             />
             <TextInput
               style={styles.input}
               value={newDate}
               onChangeText={(text) => setNewDate(formatDateInput(text))}
               placeholder="DD/MM/AA"
+              placeholderTextColor="#999"
               keyboardType="number-pad"
               maxLength={8}
+              color="#000"
             />
             <TouchableOpacity style={styles.button} onPress={saveUpdate}>
               <Text style={{ color: "white" }}>Actualizar</Text>
@@ -351,34 +342,17 @@ export function WeightLogger() {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "white",
-    padding: 12,
-    marginBottom: 10,
-    borderRadius: 8,
-  },
+  card: { backgroundColor: "white", padding: 12, marginBottom: 10, borderRadius: 8 },
   input: {
     borderWidth: 1,
+    borderColor: "#ccc",
     padding: 8,
     marginBottom: 10,
     borderRadius: 6,
+    color: "#000",
   },
-  button: {
-    backgroundColor: "#1f2937",
-    padding: 10,
-    borderRadius: 6,
-    alignItems: "center",
-  },
-  title: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
-  modalBg: {
-    flex: 1,
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.4)",
-    padding: 20,
-  },
-  modal: {
-    backgroundColor: "white",
-    padding: 15,
-    borderRadius: 10,
-  },
+  button: { backgroundColor: "#1f2937", padding: 10, borderRadius: 6, alignItems: "center" },
+  title: { fontSize: 18, fontWeight: "bold", marginBottom: 10, color: "#000" },
+  modalBg: { flex: 1, justifyContent: "center", backgroundColor: "rgba(0,0,0,0.4)", padding: 20 },
+  modal: { backgroundColor: "white", padding: 15, borderRadius: 10 },
 });
