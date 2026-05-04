@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal } from "react-native";
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, BackHandler } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -23,7 +23,6 @@ export function RoutineManager() {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
-
   const [newRoutineName, setNewRoutineName] = useState("");
   const [newRoutineDesc, setNewRoutineDesc] = useState("");
   const [newExercises, setNewExercises] = useState<Exercise[]>([]);
@@ -31,7 +30,6 @@ export function RoutineManager() {
   const [exerciseSets, setExerciseSets] = useState("");
   const [exerciseReps, setExerciseReps] = useState("");
 
-  // Cargar rutinas desde AsyncStorage al iniciar
   useEffect(() => {
     const loadRoutines = async () => {
       try {
@@ -71,6 +69,18 @@ export function RoutineManager() {
     loadRoutines();
   }, []);
 
+  useEffect(() => {
+    const backAction = () => {
+      if (modalVisible) {
+        setModalVisible(false);
+        return true;
+      }
+      return false;
+    };
+    const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
+    return () => backHandler.remove();
+  }, [modalVisible]);
+
   const saveRoutines = async (newRoutines: Routine[]) => {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newRoutines));
@@ -103,7 +113,6 @@ export function RoutineManager() {
     if (!newRoutineName || newExercises.length === 0) return;
 
     if (editingRoutineId) {
-      // Editando rutina existente
       const updatedRoutines = routines.map(r =>
         r.id === editingRoutineId
           ? { ...r, name: newRoutineName, description: newRoutineDesc, exercises: newExercises }
@@ -112,7 +121,6 @@ export function RoutineManager() {
       setRoutines(updatedRoutines);
       saveRoutines(updatedRoutines);
     } else {
-      // Creando nueva rutina
       const newRoutine: Routine = {
         id: Date.now().toString(),
         name: newRoutineName,
@@ -124,7 +132,6 @@ export function RoutineManager() {
       saveRoutines(updatedRoutines);
     }
 
-    // Reset modal
     setEditingRoutineId(null);
     setNewRoutineName("");
     setNewRoutineDesc("");
@@ -151,6 +158,17 @@ export function RoutineManager() {
     saveRoutines(updatedRoutines);
   };
 
+  const closeModal = () => {
+    setEditingRoutineId(null);
+    setNewRoutineName("");
+    setNewRoutineDesc("");
+    setNewExercises([]);
+    setExerciseName("");
+    setExerciseSets("");
+    setExerciseReps("");
+    setModalVisible(false);
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <TouchableOpacity style={styles.button} onPress={() => setModalVisible(true)}>
@@ -158,24 +176,60 @@ export function RoutineManager() {
         <Text style={styles.buttonText}>Crear rutina</Text>
       </TouchableOpacity>
 
-      {/* Modal crear/editar */}
-      <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={() => setModalVisible(false)}>
+      <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={closeModal}>
         <View style={styles.modalBackground}>
           <View style={styles.modalContainer}>
+
+            <TouchableOpacity onPress={closeModal} style={{ marginBottom: 10 }}>
+              <MaterialCommunityIcons name="arrow-left" size={24} color="#1f2937" />
+            </TouchableOpacity>
+
             <Text style={styles.modalTitle}>{editingRoutineId ? "Editar rutina" : "Nueva rutina"}</Text>
-            <TextInput placeholder="Nombre de la rutina" style={styles.input} value={newRoutineName} onChangeText={setNewRoutineName} />
+            <TextInput
+              placeholder="Nombre de la rutina"
+              style={styles.input}
+              value={newRoutineName}
+              onChangeText={setNewRoutineName}
+              placeholderTextColor="#999"
+              color="#000"
+            />
             <TextInput
               placeholder="Descripción"
               style={[styles.input, { height: 60 }]}
               value={newRoutineDesc}
               onChangeText={setNewRoutineDesc}
               multiline
+              placeholderTextColor="#999"
+              color="#000"
             />
-            <Text style={{ fontWeight: "bold", marginTop: 10 }}>Añadir ejercicios:</Text>
-            <TextInput placeholder="Nombre del ejercicio" style={styles.input} value={exerciseName} onChangeText={setExerciseName} />
+            <Text style={{ fontWeight: "bold", marginTop: 10, color: "#000" }}>Añadir ejercicios:</Text>
+            <TextInput
+              placeholder="Nombre del ejercicio"
+              style={styles.input}
+              value={exerciseName}
+              onChangeText={setExerciseName}
+              placeholderTextColor="#999"
+              color="#000"
+            />
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <TextInput placeholder="Series" style={[styles.input, { flex: 1, marginRight: 5 }]} keyboardType="number-pad" value={exerciseSets} onChangeText={setExerciseSets} />
-              <TextInput placeholder="Repeticiones" style={[styles.input, { flex: 1, marginLeft: 5 }]} keyboardType="number-pad" value={exerciseReps} onChangeText={setExerciseReps} />
+              <TextInput
+                placeholder="Series"
+                style={[styles.input, { flex: 1, marginRight: 5 }]}
+                keyboardType="number-pad"
+                value={exerciseSets}
+                onChangeText={setExerciseSets}
+                placeholderTextColor="#999"
+                color="#000"
+              />
+              <TextInput
+                placeholder="Repeticiones"
+                style={[styles.input, { flex: 1, marginLeft: 5 }]}
+                keyboardType="number-pad"
+                value={exerciseReps}
+                onChangeText={setExerciseReps}
+                placeholderTextColor="#999"
+                color="#000"
+              />
             </View>
             <TouchableOpacity style={[styles.button, { marginTop: 10 }]} onPress={handleAddExercise}>
               <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
@@ -186,10 +240,8 @@ export function RoutineManager() {
               <View style={{ marginTop: 10 }}>
                 {newExercises.map((ex, i) => (
                   <View key={i} style={styles.exerciseRow}>
-                    <Text>{ex.name} ({ex.sets}×{ex.reps})</Text>
-                    <TouchableOpacity onPress={() => {
-                      setNewExercises(newExercises.filter((_, idx) => idx !== i));
-                    }}>
+                    <Text style={{ color: "#000" }}>{ex.name} ({ex.sets}×{ex.reps})</Text>
+                    <TouchableOpacity onPress={() => setNewExercises(newExercises.filter((_, idx) => idx !== i))}>
                       <MaterialCommunityIcons name="trash-can-outline" size={20} color="#555" />
                     </TouchableOpacity>
                   </View>
@@ -204,12 +256,11 @@ export function RoutineManager() {
         </View>
       </Modal>
 
-      {/* Listado de rutinas */}
       <ScrollView style={{ marginTop: 10 }}>
         {routines.map(routine => (
           <View key={routine.id} style={styles.card}>
             <View style={styles.cardHeader}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.routineTitle}>{routine.name}</Text>
                 <Text style={styles.routineDesc}>{routine.description}</Text>
               </View>
@@ -226,8 +277,8 @@ export function RoutineManager() {
               {routine.exercises.map((ex, i) => (
                 <TouchableOpacity key={i} style={styles.exerciseRow} onPress={() => toggleExerciseCompleted(routine.id, i)}>
                   <MaterialCommunityIcons name={ex.completed ? "check-circle" : "checkbox-blank-circle-outline"} size={16} color={ex.completed ? "green" : "#555"} style={{ marginRight: 5 }} />
-                  <Text>{ex.name}</Text>
-                  <Text>{ex.sets}×{ex.reps}</Text>
+                  <Text style={{ color: "#000" }}>{ex.name}</Text>
+                  <Text style={{ color: "#000" }}>{ex.sets}×{ex.reps}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -251,11 +302,19 @@ const styles = StyleSheet.create({
   buttonText: { color: "white", fontWeight: "bold" },
   modalBackground: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 16 },
   modalContainer: { backgroundColor: "white", borderRadius: 8, padding: 16, maxHeight: "80%" },
-  modalTitle: { fontSize: 18, fontWeight: "bold" },
-  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10 },
+  modalTitle: { fontSize: 18, fontWeight: "bold", color: "#000", marginBottom: 10 },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
+    color: "#000",
+  },
   card: { backgroundColor: "white", borderRadius: 8, padding: 12, marginBottom: 10, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  routineTitle: { fontWeight: "bold", fontSize: 16 },
+  routineTitle: { fontWeight: "bold", fontSize: 16, color: "#000" },
   routineDesc: { color: "#555" },
   exerciseRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginVertical: 3 },
 });
