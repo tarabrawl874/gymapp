@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Switch } from "react-native";
 import { WeightLogger } from "./components/WeightLogger";
 import { RoutineManager } from "./components/RoutineManager";
+import { CalendarView } from "./components/CalendarView";
 import { ThemeProvider, useTheme } from "./components/ThemeContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
@@ -12,22 +13,18 @@ function AppContent() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case "routines":
-        return <RoutineManager />;
-      case "weights":
-        return <WeightLogger />;
-      case "exercises":
-        return (
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-            <Text style={{ fontSize: 32 }}>🚧</Text>
-            <Text style={{ fontSize: 22, fontWeight: "bold", marginTop: 12, color: colors.text }}>Próximamente</Text>
-            <Text style={{ fontSize: 14, marginTop: 8, color: colors.textSecondary }}>Esta sección está en desarrollo</Text>
-          </View>
-        );
-      default:
-        return null;
+      case "routines": return <RoutineManager />;
+      case "weights": return <WeightLogger />;
+      case "calendar": return <CalendarView />;
+      default: return null;
     }
   };
+
+  const tabs = [
+    { key: "routines", label: "Rutinas", icon: "dumbbell" },
+    { key: "weights", label: "Pesos", icon: "weight-kilogram" },
+    { key: "calendar", label: "Calendario", icon: "calendar-month" },
+  ];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -37,7 +34,7 @@ function AppContent() {
         <View>
           <Text style={styles.logo}>E2</Text>
           <Text style={styles.title}>GYM</Text>
-          <Text style={styles.subtitle}></Text>
+          <Text style={styles.subtitle}>Tu entrenador personal</Text>
         </View>
         <TouchableOpacity onPress={() => setSettingsModal(true)} style={styles.settingsBtn}>
           <MaterialCommunityIcons name="cog-outline" size={26} color="white" />
@@ -46,51 +43,35 @@ function AppContent() {
 
       {/* Tabs */}
       <View style={[styles.tabs, { backgroundColor: colors.card, borderBottomColor: colors.border, borderBottomWidth: 0.5 }]}>
-        {["routines", "weights", "exercises"].map((tab) => {
-          const labels: Record<string, string> = { routines: "Rutinas", weights: "Pesos", exercises: "Próximamente" };
-          const isActive = activeTab === tab;
+        {tabs.map(tab => {
+          const isActive = activeTab === tab.key;
           return (
-            <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={[styles.tabItem, isActive && { borderBottomWidth: 2, borderBottomColor: colors.button }]}>
-              <Text style={{ fontSize: 15, color: isActive ? colors.button : colors.textSecondary, fontWeight: isActive ? "bold" : "normal" }}>
-                {labels[tab]}
+            <TouchableOpacity key={tab.key} onPress={() => setActiveTab(tab.key)} style={[styles.tabItem, isActive && { borderBottomWidth: 2, borderBottomColor: colors.button }]}>
+              <Text style={{ fontSize: 14, color: isActive ? colors.button : colors.textSecondary, fontWeight: isActive ? "bold" : "normal" }}>
+                {tab.label}
               </Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
-      {/* Contenido */}
       <View style={styles.content}>{renderContent()}</View>
 
       {/* Modal Ajustes */}
       <Modal visible={settingsModal} transparent animationType="fade" onRequestClose={() => setSettingsModal(false)}>
         <View style={[styles.modalBg, { backgroundColor: colors.modalBg }]}>
           <View style={[styles.modal, { backgroundColor: colors.card }]}>
-
             <TouchableOpacity onPress={() => setSettingsModal(false)} style={{ marginBottom: 16 }}>
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
-
             <Text style={{ fontSize: 20, fontWeight: "bold", color: colors.text, marginBottom: 24 }}>Ajustes</Text>
-
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <MaterialCommunityIcons
-                  name={isDark ? "weather-night" : "weather-sunny"}
-                  size={22}
-                  color={colors.text}
-                  style={{ marginRight: 10 }}
-                />
+                <MaterialCommunityIcons name={isDark ? "weather-night" : "weather-sunny"} size={22} color={colors.text} style={{ marginRight: 10 }} />
                 <Text style={{ fontSize: 16, color: colors.text }}>{isDark ? "Modo oscuro" : "Modo claro"}</Text>
               </View>
-              <Switch
-                value={isDark}
-                onValueChange={toggleTheme}
-                trackColor={{ false: "#ccc", true: "#3b82f6" }}
-                thumbColor={isDark ? "#fff" : "#fff"}
-              />
+              <Switch value={isDark} onValueChange={toggleTheme} trackColor={{ false: "#ccc", true: "#3b82f6" }} thumbColor="#fff" />
             </View>
-
           </View>
         </View>
       </Modal>
