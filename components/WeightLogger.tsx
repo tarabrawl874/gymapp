@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, BackHandler } from "react-native";
+import { View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet, Modal, BackHandler } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "./ThemeContext";
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from "react-native-draggable-flatlist";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 interface WeightEntry {
   id: string;
@@ -13,12 +11,8 @@ interface WeightEntry {
   date: string;
 }
 
-interface ExerciseGroup {
-  exercise: string;
-  entries: WeightEntry[];
-}
-
 const STORAGE_KEY = "@weight_entries";
+const ORDER_KEY = "@weight_order";
 
 const toSpanish = (iso: string) => {
   const d = new Date(iso);
@@ -42,8 +36,6 @@ const formatDateInput = (text: string): string => {
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 };
-
-const ORDER_KEY = "@weight_order";
 
 export function WeightLogger() {
   const { colors } = useTheme();
@@ -97,11 +89,8 @@ export function WeightLogger() {
     if (!exercise || !weight || !date) return;
     const isoDate = toISO(date);
     if (!isoDate) return;
-    const newEntry: WeightEntry = { id: Date.now().toString(), exercise, weight: parseFloat(weight), date: isoDate };
-    save([newEntry, ...entries]);
-    if (!exerciseOrder.includes(exercise)) {
-      saveOrder([exercise, ...exerciseOrder]);
-    }
+    save([{ id: Date.now().toString(), exercise, weight: parseFloat(weight), date: isoDate }, ...entries]);
+    if (!exerciseOrder.includes(exercise)) saveOrder([exercise, ...exerciseOrder]);
     setExercise(""); setWeight(""); setDate(todaySpanish());
   };
 
@@ -140,19 +129,24 @@ export function WeightLogger() {
 
   const grouped = useMemo(() => {
     const map = new Map<string, WeightEntry[]>();
-    entries.forEach(e => {
-      const list = map.get(e.exercise) || [];
-      map.set(e.exercise, [e, ...list]);
-    });
+    entries.forEach(e => { const list = map.get(e.exercise) || []; map.set(e.exercise, [e, ...list]); });
     return map;
   }, [entries]);
 
-  const orderedGroups: ExerciseGroup[] = useMemo(() => {
-    const allExercises = Array.from(grouped.keys());
-    const ordered = exerciseOrder.filter(ex => allExercises.includes(ex));
-    const newOnes = allExercises.filter(ex => !exerciseOrder.includes(ex));
-    return [...newOnes, ...ordered].map(ex => ({ exercise: ex, entries: grouped.get(ex) || [] }));
+  const orderedExercises = useMemo(() => {
+    const all = Array.from(grouped.keys());
+    const ordered = exerciseOrder.filter(ex => all.includes(ex));
+    const newOnes = all.filter(ex => !exerciseOrder.includes(ex));
+    return [...newOnes, ...ordered];
   }, [grouped, exerciseOrder]);
+
+  const moveExercise = (index: number, direction: "up" | "down") => {
+    const newOrder = [...orderedExercises];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newOrder.length) return;
+    [newOrder[index], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[index]];
+    saveOrder(newOrder);
+  };
 
   const toggle = (ex: string) => setExpanded(prev => ({ ...prev, [ex]: !prev[ex] }));
 
@@ -166,59 +160,10 @@ export function WeightLogger() {
     backgroundColor: colors.background,
   };
 
-  const renderItem = ({ item, drag, isActive }: RenderItemParams<ExerciseGroup>) => {
-    const sorted = [...item.entries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const open = expanded[item.exercise];
-    const visible = open ? sorted : sorted.slice(0, 2);
-
-    return (
-      <ScaleDecorator>
-        <TouchableOpacity
-          onLongPress={drag}
-          delayLongPress={200}
-          style={[styles.card, { backgroundColor: isActive ? colors.border : colors.card }]}
-        >
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <View>
-              <Text style={{ fontWeight: "bold", fontSize: 16, color: colors.text }}>{item.exercise}</Text>
-              <Text style={{ color: "green" }}>+{getProgress(item.entries)}%</Text>
-            </View>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <MaterialCommunityIcons name="drag" size={20} color={colors.textSecondary} style={{ marginRight: 6 }} />
-              <TouchableOpacity onPress={() => openUpdate(item.exercise)}>
-                <MaterialCommunityIcons name="plus-circle-outline" size={22} color={colors.text} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => toggle(item.exercise)} style={{ marginLeft: 10 }}>
-                <MaterialCommunityIcons name={open ? "chevron-up" : "chevron-down"} size={22} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {visible.map(e => (
-            <View key={e.id} style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
-              <View>
-                <Text style={{ color: colors.text }}>{e.weight} kg</Text>
-                <Text style={{ fontSize: 12, color: colors.textSecondary }}>{toSpanish(e.date)}</Text>
-              </View>
-              <View style={{ flexDirection: "row" }}>
-                <TouchableOpacity onPress={() => openEdit(e)} style={{ marginRight: 10 }}>
-                  <MaterialCommunityIcons name="pencil-outline" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => deleteEntry(e.id)}>
-                  <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-        </TouchableOpacity>
-      </ScaleDecorator>
-    );
-  };
-
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
+    <ScrollView style={{ flex: 1, padding: 10, backgroundColor: colors.background }}>
 
-      <View style={[styles.card, { backgroundColor: colors.card, margin: 10 }]}>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
         <Text style={[styles.title, { color: colors.text }]}>Registrar peso</Text>
         <TextInput style={inputStyle} placeholder="Ejercicio" placeholderTextColor={colors.placeholder} value={exercise} onChangeText={setExercise} />
         <TextInput style={inputStyle} placeholder="Peso (kg)" placeholderTextColor={colors.placeholder} keyboardType="numeric" value={weight} onChangeText={setWeight} />
@@ -228,13 +173,56 @@ export function WeightLogger() {
         </TouchableOpacity>
       </View>
 
-      <DraggableFlatList
-        data={orderedGroups}
-        keyExtractor={item => item.exercise}
-        onDragEnd={({ data }) => saveOrder(data.map(d => d.exercise))}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 20 }}
-      />
+      {orderedExercises.map((ex, index) => {
+        const list = grouped.get(ex) || [];
+        const sorted = [...list].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const open = expanded[ex];
+        const visible = open ? sorted : sorted.slice(0, 2);
+
+        return (
+          <View key={ex} style={[styles.card, { backgroundColor: colors.card }]}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <View>
+                <Text style={{ fontWeight: "bold", fontSize: 16, color: colors.text }}>{ex}</Text>
+                <Text style={{ color: "green" }}>+{getProgress(list)}%</Text>
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View style={{ marginRight: 6 }}>
+                  <TouchableOpacity onPress={() => moveExercise(index, "up")} disabled={index === 0}>
+                    <MaterialCommunityIcons name="chevron-up" size={18} color={index === 0 ? colors.border : colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => moveExercise(index, "down")} disabled={index === orderedExercises.length - 1}>
+                    <MaterialCommunityIcons name="chevron-down" size={18} color={index === orderedExercises.length - 1 ? colors.border : colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity onPress={() => openUpdate(ex)}>
+                  <MaterialCommunityIcons name="plus-circle-outline" size={22} color={colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => toggle(ex)} style={{ marginLeft: 10 }}>
+                  <MaterialCommunityIcons name={open ? "chevron-up" : "chevron-down"} size={22} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {visible.map(e => (
+              <View key={e.id} style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
+                <View>
+                  <Text style={{ color: colors.text }}>{e.weight} kg</Text>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>{toSpanish(e.date)}</Text>
+                </View>
+                <View style={{ flexDirection: "row" }}>
+                  <TouchableOpacity onPress={() => openEdit(e)} style={{ marginRight: 10 }}>
+                    <MaterialCommunityIcons name="pencil-outline" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => deleteEntry(e.id)}>
+                    <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        );
+      })}
 
       <Modal visible={editModal} transparent onRequestClose={() => setEditModal(false)}>
         <View style={[styles.modalBg, { backgroundColor: colors.modalBg }]}>
@@ -266,7 +254,7 @@ export function WeightLogger() {
         </View>
       </Modal>
 
-    </GestureHandlerRootView>
+    </ScrollView>
   );
 }
 
