@@ -5,6 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "./ThemeContext";
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from "react-native-draggable-flatlist";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { WORKOUT_LOG_KEY } from "./CalendarView";
 
 interface Exercise {
   name: string;
@@ -93,9 +94,7 @@ export function RoutineManager() {
   const handleAddExercise = () => {
     if (exerciseName && exerciseSets && exerciseReps) {
       setNewExercises([...newExercises, { name: exerciseName, sets: parseInt(exerciseSets), reps: parseInt(exerciseReps), completed: false }]);
-      setExerciseName("");
-      setExerciseSets("");
-      setExerciseReps("");
+      setExerciseName(""); setExerciseSets(""); setExerciseReps("");
     }
   };
 
@@ -137,7 +136,7 @@ export function RoutineManager() {
     saveRoutines(updatedRoutines);
   };
 
-  const toggleExerciseCompleted = (routineId: string, exerciseIndex: number) => {
+  const toggleExerciseCompleted = async (routineId: string, exerciseIndex: number) => {
     const updatedRoutines = routines.map(r => {
       if (r.id === routineId) {
         const updatedExercises = [...r.exercises];
@@ -146,8 +145,26 @@ export function RoutineManager() {
       }
       return r;
     });
+
     setRoutines(updatedRoutines);
     saveRoutines(updatedRoutines);
+
+    // Comprobar si la rutina está completada entera
+    const routine = updatedRoutines.find(r => r.id === routineId);
+    if (routine && routine.exercises.every(e => e.completed)) {
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+      const existing = await AsyncStorage.getItem(WORKOUT_LOG_KEY);
+      const logs = existing ? JSON.parse(existing) : [];
+
+      // No duplicar si ya está registrado hoy
+      const alreadyLogged = logs.find((l: any) => l.date === dateStr && l.routineName === routine.name);
+      if (!alreadyLogged) {
+        logs.push({ date: dateStr, routineName: routine.name });
+        await AsyncStorage.setItem(WORKOUT_LOG_KEY, JSON.stringify(logs));
+      }
+    }
   };
 
   const closeModal = () => {
@@ -155,9 +172,7 @@ export function RoutineManager() {
     setNewRoutineName("");
     setNewRoutineDesc("");
     setNewExercises([]);
-    setExerciseName("");
-    setExerciseSets("");
-    setExerciseReps("");
+    setExerciseName(""); setExerciseSets(""); setExerciseReps("");
     setModalVisible(false);
   };
 
@@ -180,17 +195,14 @@ export function RoutineManager() {
         <TouchableOpacity
           onLongPress={drag}
           delayLongPress={200}
-          style={[
-            styles.card,
-            { backgroundColor: isActive ? colors.border : colors.card },
-          ]}
+          style={[styles.card, { backgroundColor: isActive ? colors.border : colors.card }]}
         >
           <View style={styles.cardHeader}>
             <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
               {allCompleted && (
-                <MaterialCommunityIcons name="check-circle" size={20} color="green" style={{ marginRight: 6 }} />
+                <MaterialCommunityIcons name="check-circle" size={20} color="#22c55e" style={{ marginRight: 6 }} />
               )}
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={[styles.routineTitle, { color: colors.text }]}>{item.name}</Text>
                 <Text style={{ color: colors.textSecondary }}>{item.description}</Text>
               </View>
@@ -212,7 +224,7 @@ export function RoutineManager() {
                 <MaterialCommunityIcons
                   name={ex.completed ? "check-circle" : "checkbox-blank-circle-outline"}
                   size={16}
-                  color={ex.completed ? "green" : colors.textSecondary}
+                  color={ex.completed ? "#22c55e" : colors.textSecondary}
                   style={{ marginRight: 5 }}
                 />
                 <Text style={{ color: colors.text, flex: 1 }}>{ex.name}</Text>
@@ -227,7 +239,6 @@ export function RoutineManager() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
-
       <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, margin: 10 }]} onPress={() => setModalVisible(true)}>
         <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
         <Text style={styles.buttonText}>Crear rutina</Text>
@@ -236,10 +247,7 @@ export function RoutineManager() {
       <DraggableFlatList
         data={routines}
         keyExtractor={item => item.id}
-        onDragEnd={({ data }) => {
-          setRoutines(data);
-          saveRoutines(data);
-        }}
+        onDragEnd={({ data }) => { setRoutines(data); saveRoutines(data); }}
         renderItem={renderItem}
         contentContainerStyle={{ paddingBottom: 20 }}
       />
@@ -247,29 +255,22 @@ export function RoutineManager() {
       <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={closeModal}>
         <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
           <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
-
             <TouchableOpacity onPress={closeModal} style={{ marginBottom: 10 }}>
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
-
             <Text style={[styles.modalTitle, { color: colors.text }]}>{editingRoutineId ? "Editar rutina" : "Nueva rutina"}</Text>
-
             <TextInput placeholder="Nombre de la rutina" style={inputStyle} value={newRoutineName} onChangeText={setNewRoutineName} placeholderTextColor={colors.placeholder} />
             <TextInput placeholder="Descripción" style={[inputStyle, { height: 60 }]} value={newRoutineDesc} onChangeText={setNewRoutineDesc} multiline placeholderTextColor={colors.placeholder} />
-
             <Text style={{ fontWeight: "bold", marginTop: 10, color: colors.text }}>Añadir ejercicios:</Text>
             <TextInput placeholder="Nombre del ejercicio" style={inputStyle} value={exerciseName} onChangeText={setExerciseName} placeholderTextColor={colors.placeholder} />
-
             <View style={{ flexDirection: "row" }}>
               <TextInput placeholder="Series" style={[inputStyle, { flex: 1, marginRight: 5 }]} keyboardType="number-pad" value={exerciseSets} onChangeText={setExerciseSets} placeholderTextColor={colors.placeholder} />
               <TextInput placeholder="Reps" style={[inputStyle, { flex: 1, marginLeft: 5 }]} keyboardType="number-pad" value={exerciseReps} onChangeText={setExerciseReps} placeholderTextColor={colors.placeholder} />
             </View>
-
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 10 }]} onPress={handleAddExercise}>
               <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
               <Text style={styles.buttonText}>Añadir ejercicio</Text>
             </TouchableOpacity>
-
             {newExercises.length > 0 && (
               <View style={{ marginTop: 10 }}>
                 {newExercises.map((ex, i) => (
@@ -282,14 +283,12 @@ export function RoutineManager() {
                 ))}
               </View>
             )}
-
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 20 }]} onPress={handleSaveRoutine}>
               <Text style={styles.buttonText}>{editingRoutineId ? "Guardar cambios" : "Crear rutina"}</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-
     </GestureHandlerRootView>
   );
 }
