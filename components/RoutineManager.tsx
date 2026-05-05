@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, BackHandler } from "react-native";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, BackHandler } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "./ThemeContext";
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from "react-native-draggable-flatlist";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 interface Exercise {
   name: string;
@@ -170,12 +172,77 @@ export function RoutineManager() {
     backgroundColor: colors.background,
   };
 
+  const renderItem = ({ item, drag, isActive }: RenderItemParams<Routine>) => {
+    const allCompleted = item.exercises.length > 0 && item.exercises.every(e => e.completed);
+
+    return (
+      <ScaleDecorator>
+        <TouchableOpacity
+          onLongPress={drag}
+          delayLongPress={200}
+          style={[
+            styles.card,
+            { backgroundColor: isActive ? colors.border : colors.card },
+          ]}
+        >
+          <View style={styles.cardHeader}>
+            <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
+              {allCompleted && (
+                <MaterialCommunityIcons name="check-circle" size={20} color="green" style={{ marginRight: 6 }} />
+              )}
+              <View>
+                <Text style={[styles.routineTitle, { color: colors.text }]}>{item.name}</Text>
+                <Text style={{ color: colors.textSecondary }}>{item.description}</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <MaterialCommunityIcons name="drag" size={20} color={colors.textSecondary} style={{ marginRight: 6 }} />
+              <TouchableOpacity onPress={() => openEditModal(item)} style={{ marginRight: 10 }}>
+                <MaterialCommunityIcons name="pencil-outline" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleDeleteRoutine(item.id)}>
+                <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={{ marginTop: 8 }}>
+            {item.exercises.map((ex, i) => (
+              <TouchableOpacity key={i} style={styles.exerciseRow} onPress={() => toggleExerciseCompleted(item.id, i)}>
+                <MaterialCommunityIcons
+                  name={ex.completed ? "check-circle" : "checkbox-blank-circle-outline"}
+                  size={16}
+                  color={ex.completed ? "green" : colors.textSecondary}
+                  style={{ marginRight: 5 }}
+                />
+                <Text style={{ color: colors.text, flex: 1 }}>{ex.name}</Text>
+                <Text style={{ color: colors.textSecondary }}>{ex.sets}×{ex.reps}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </ScaleDecorator>
+    );
+  };
+
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
+
       <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, margin: 10 }]} onPress={() => setModalVisible(true)}>
         <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
         <Text style={styles.buttonText}>Crear rutina</Text>
       </TouchableOpacity>
+
+      <DraggableFlatList
+        data={routines}
+        keyExtractor={item => item.id}
+        onDragEnd={({ data }) => {
+          setRoutines(data);
+          saveRoutines(data);
+        }}
+        renderItem={renderItem}
+        contentContainerStyle={{ paddingBottom: 20 }}
+      />
 
       <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={closeModal}>
         <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
@@ -223,36 +290,7 @@ export function RoutineManager() {
         </View>
       </Modal>
 
-      <ScrollView style={{ marginTop: 4 }}>
-        {routines.map(routine => (
-          <View key={routine.id} style={[styles.card, { backgroundColor: colors.card }]}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.routineTitle, { color: colors.text }]}>{routine.name}</Text>
-                <Text style={{ color: colors.textSecondary }}>{routine.description}</Text>
-              </View>
-              <View style={{ flexDirection: "row" }}>
-                <TouchableOpacity onPress={() => openEditModal(routine)} style={{ marginRight: 10 }}>
-                  <MaterialCommunityIcons name="pencil-outline" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDeleteRoutine(routine.id)}>
-                  <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View style={{ marginTop: 8 }}>
-              {routine.exercises.map((ex, i) => (
-                <TouchableOpacity key={i} style={styles.exerciseRow} onPress={() => toggleExerciseCompleted(routine.id, i)}>
-                  <MaterialCommunityIcons name={ex.completed ? "check-circle" : "checkbox-blank-circle-outline"} size={16} color={ex.completed ? "green" : colors.textSecondary} style={{ marginRight: 5 }} />
-                  <Text style={{ color: colors.text, flex: 1 }}>{ex.name}</Text>
-                  <Text style={{ color: colors.textSecondary }}>{ex.sets}×{ex.reps}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-    </View>
+    </GestureHandlerRootView>
   );
 }
 
