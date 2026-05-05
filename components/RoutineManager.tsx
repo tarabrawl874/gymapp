@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, BackHandler } from "react-native";
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, BackHandler } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "./ThemeContext";
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from "react-native-draggable-flatlist";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { WORKOUT_LOG_KEY } from "./CalendarView";
 
 interface Exercise {
@@ -91,6 +89,15 @@ export function RoutineManager() {
     }
   };
 
+  const moveRoutine = (index: number, direction: "up" | "down") => {
+    const newRoutines = [...routines];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newRoutines.length) return;
+    [newRoutines[index], newRoutines[targetIndex]] = [newRoutines[targetIndex], newRoutines[index]];
+    setRoutines(newRoutines);
+    saveRoutines(newRoutines);
+  };
+
   const handleAddExercise = () => {
     if (exerciseName && exerciseSets && exerciseReps) {
       setNewExercises([...newExercises, { name: exerciseName, sets: parseInt(exerciseSets), reps: parseInt(exerciseReps), completed: false }]);
@@ -145,20 +152,15 @@ export function RoutineManager() {
       }
       return r;
     });
-
     setRoutines(updatedRoutines);
     saveRoutines(updatedRoutines);
 
-    // Comprobar si la rutina está completada entera
     const routine = updatedRoutines.find(r => r.id === routineId);
     if (routine && routine.exercises.every(e => e.completed)) {
       const today = new Date();
       const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-
       const existing = await AsyncStorage.getItem(WORKOUT_LOG_KEY);
       const logs = existing ? JSON.parse(existing) : [];
-
-      // No duplicar si ya está registrado hoy
       const alreadyLogged = logs.find((l: any) => l.date === dateStr && l.routineName === routine.name);
       if (!alreadyLogged) {
         logs.push({ date: dateStr, routineName: routine.name });
@@ -187,70 +189,64 @@ export function RoutineManager() {
     backgroundColor: colors.background,
   };
 
-  const renderItem = ({ item, drag, isActive }: RenderItemParams<Routine>) => {
-    const allCompleted = item.exercises.length > 0 && item.exercises.every(e => e.completed);
-
-    return (
-      <ScaleDecorator>
-        <TouchableOpacity
-          onLongPress={drag}
-          delayLongPress={200}
-          style={[styles.card, { backgroundColor: isActive ? colors.border : colors.card }]}
-        >
-          <View style={styles.cardHeader}>
-            <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
-              {allCompleted && (
-                <MaterialCommunityIcons name="check-circle" size={20} color="#22c55e" style={{ marginRight: 6 }} />
-              )}
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.routineTitle, { color: colors.text }]}>{item.name}</Text>
-                <Text style={{ color: colors.textSecondary }}>{item.description}</Text>
-              </View>
-            </View>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <MaterialCommunityIcons name="drag" size={20} color={colors.textSecondary} style={{ marginRight: 6 }} />
-              <TouchableOpacity onPress={() => openEditModal(item)} style={{ marginRight: 10 }}>
-                <MaterialCommunityIcons name="pencil-outline" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleDeleteRoutine(item.id)}>
-                <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={{ marginTop: 8 }}>
-            {item.exercises.map((ex, i) => (
-              <TouchableOpacity key={i} style={styles.exerciseRow} onPress={() => toggleExerciseCompleted(item.id, i)}>
-                <MaterialCommunityIcons
-                  name={ex.completed ? "check-circle" : "checkbox-blank-circle-outline"}
-                  size={16}
-                  color={ex.completed ? "#22c55e" : colors.textSecondary}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={{ color: colors.text, flex: 1 }}>{ex.name}</Text>
-                <Text style={{ color: colors.textSecondary }}>{ex.sets}×{ex.reps}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </ScaleDecorator>
-    );
-  };
-
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, margin: 10 }]} onPress={() => setModalVisible(true)}>
         <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
         <Text style={styles.buttonText}>Crear rutina</Text>
       </TouchableOpacity>
 
-      <DraggableFlatList
-        data={routines}
-        keyExtractor={item => item.id}
-        onDragEnd={({ data }) => { setRoutines(data); saveRoutines(data); }}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 20 }}
-      />
+      <ScrollView style={{ marginTop: 4 }}>
+        {routines.map((routine, index) => {
+          const allCompleted = routine.exercises.length > 0 && routine.exercises.every(e => e.completed);
+          return (
+            <View key={routine.id} style={[styles.card, { backgroundColor: colors.card }]}>
+              <View style={styles.cardHeader}>
+                <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
+                  {allCompleted && (
+                    <MaterialCommunityIcons name="check-circle" size={20} color="#22c55e" style={{ marginRight: 6 }} />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.routineTitle, { color: colors.text }]}>{routine.name}</Text>
+                    <Text style={{ color: colors.textSecondary }}>{routine.description}</Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <View style={{ marginRight: 6 }}>
+                    <TouchableOpacity onPress={() => moveRoutine(index, "up")} disabled={index === 0}>
+                      <MaterialCommunityIcons name="chevron-up" size={20} color={index === 0 ? colors.border : colors.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => moveRoutine(index, "down")} disabled={index === routines.length - 1}>
+                      <MaterialCommunityIcons name="chevron-down" size={20} color={index === routines.length - 1 ? colors.border : colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity onPress={() => openEditModal(routine)} style={{ marginRight: 10 }}>
+                    <MaterialCommunityIcons name="pencil-outline" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDeleteRoutine(routine.id)}>
+                    <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={{ marginTop: 8 }}>
+                {routine.exercises.map((ex, i) => (
+                  <TouchableOpacity key={i} style={styles.exerciseRow} onPress={() => toggleExerciseCompleted(routine.id, i)}>
+                    <MaterialCommunityIcons
+                      name={ex.completed ? "check-circle" : "checkbox-blank-circle-outline"}
+                      size={16}
+                      color={ex.completed ? "#22c55e" : colors.textSecondary}
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text style={{ color: colors.text, flex: 1 }}>{ex.name}</Text>
+                    <Text style={{ color: colors.textSecondary }}>{ex.sets}×{ex.reps}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
 
       <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={closeModal}>
         <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
@@ -289,7 +285,7 @@ export function RoutineManager() {
           </View>
         </View>
       </Modal>
-    </GestureHandlerRootView>
+    </View>
   );
 }
 
