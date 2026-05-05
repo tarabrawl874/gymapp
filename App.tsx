@@ -34,7 +34,7 @@ function AppContent() {
         <View>
           <Text style={styles.logo}>E2</Text>
           <Text style={styles.title}>GYM</Text>
-          <Text style={styles.subtitle}>Tu entrenador personal</Text>
+          <Text style={styles.subtitle}></Text>
         </View>
         <TouchableOpacity onPress={() => setSettingsModal(true)} style={styles.settingsBtn}>
           <MaterialCommunityIcons name="cog-outline" size={26} color="white" />
