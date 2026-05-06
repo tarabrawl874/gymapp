@@ -53,7 +53,7 @@ export function CalendarView() {
     return logs.find(l => l.date === dateStr);
   };
 
-  const streak = () => {
+  const currentStreak = () => {
     let count = 0;
     const today = new Date();
     for (let i = 0; i < 365; i++) {
@@ -69,6 +69,40 @@ export function CalendarView() {
     return count;
   };
 
+  const longestStreak = () => {
+    if (logs.length === 0) return 0;
+    const uniqueDates = [...new Set(logs.map(l => l.date))].sort();
+    let max = 1;
+    let current = 1;
+    for (let i = 1; i < uniqueDates.length; i++) {
+      const prev = new Date(uniqueDates[i - 1]);
+      const curr = new Date(uniqueDates[i]);
+      const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+      if (diff === 1) {
+        current++;
+        max = Math.max(max, current);
+      } else {
+        current = 1;
+      }
+    }
+    return max;
+  };
+
+  const daysThisMonth = () => {
+    const monthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+    const uniqueDays = new Set(logs.filter(l => l.date.startsWith(monthStr)).map(l => l.date));
+    return uniqueDays.size;
+  };
+
+  const mostFrequentRoutine = () => {
+    if (logs.length === 0) return "Ninguna";
+    const count: Record<string, number> = {};
+    logs.forEach(l => { count[l.routineName] = (count[l.routineName] || 0) + 1; });
+    return Object.entries(count).sort((a, b) => b[1] - a[1])[0][0];
+  };
+
+  const totalWorkouts = () => new Set(logs.map(l => l.date)).size;
+
   const cells = [];
   for (let i = 0; i < adjustedFirstDay; i++) cells.push(null);
   for (let i = 1; i <= daysInMonth; i++) cells.push(i);
@@ -78,11 +112,44 @@ export function CalendarView() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.background, padding: 10 }}>
 
-      {/* Racha */}
+      {/* Racha actual */}
       <View style={[styles.card, { backgroundColor: colors.card, flexDirection: "row", alignItems: "center", justifyContent: "center" }]}>
         <MaterialCommunityIcons name="fire" size={28} color="#f97316" style={{ marginRight: 8 }} />
-        <Text style={{ fontSize: 22, fontWeight: "bold", color: colors.text }}>{streak()}</Text>
+        <Text style={{ fontSize: 22, fontWeight: "bold", color: colors.text }}>{currentStreak()}</Text>
         <Text style={{ fontSize: 16, color: colors.textSecondary, marginLeft: 6 }}>días seguidos entrenando</Text>
+      </View>
+
+      {/* Estadísticas */}
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
+        <Text style={{ fontWeight: "bold", fontSize: 16, color: colors.text, marginBottom: 12 }}>Estadísticas</Text>
+
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+
+          <View style={[styles.statCard, { backgroundColor: colors.background }]}>
+            <MaterialCommunityIcons name="calendar-month" size={22} color="#3b82f6" />
+            <Text style={{ fontSize: 22, fontWeight: "bold", color: colors.text, marginTop: 4 }}>{daysThisMonth()}</Text>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: "center" }}>Días este mes</Text>
+          </View>
+
+          <View style={[styles.statCard, { backgroundColor: colors.background }]}>
+            <MaterialCommunityIcons name="trophy" size={22} color="#f59e0b" />
+            <Text style={{ fontSize: 22, fontWeight: "bold", color: colors.text, marginTop: 4 }}>{longestStreak()}</Text>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: "center" }}>Racha más larga</Text>
+          </View>
+
+          <View style={[styles.statCard, { backgroundColor: colors.background }]}>
+            <MaterialCommunityIcons name="dumbbell" size={22} color="#22c55e" />
+            <Text style={{ fontSize: 22, fontWeight: "bold", color: colors.text, marginTop: 4 }}>{totalWorkouts()}</Text>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: "center" }}>Total entrenos</Text>
+          </View>
+
+          <View style={[styles.statCard, { backgroundColor: colors.background }]}>
+            <MaterialCommunityIcons name="star" size={22} color="#a855f7" />
+            <Text style={{ fontSize: 13, fontWeight: "bold", color: colors.text, marginTop: 4, textAlign: "center" }} numberOfLines={2}>{mostFrequentRoutine()}</Text>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: "center" }}>Rutina favorita</Text>
+          </View>
+
+        </View>
       </View>
 
       {/* Navegación mes */}
@@ -189,6 +256,7 @@ export function CalendarView() {
 
 const styles = StyleSheet.create({
   card: { padding: 12, marginBottom: 10, borderRadius: 8 },
+  statCard: { width: "47%", borderRadius: 8, padding: 12, alignItems: "center" },
   dayCell: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   modalBg: { flex: 1, justifyContent: "center", padding: 20 },
   modal: { padding: 15, borderRadius: 10 },
