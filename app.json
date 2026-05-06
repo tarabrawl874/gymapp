@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "E2GYM",
-    "slug": "E2-GYM",
+    "slug": "gym-app",
     "version": "1.0.3",
     "note":"calendario y arrastrar",
     "orientation": "portrait",
