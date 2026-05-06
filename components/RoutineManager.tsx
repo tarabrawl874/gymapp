@@ -20,6 +20,7 @@ interface Routine {
 }
 
 const STORAGE_KEY = "@routines";
+const LAST_RESET_KEY = "@last_reset";
 
 export function RoutineManager() {
   const { colors } = useTheme();
@@ -37,8 +38,22 @@ export function RoutineManager() {
     const loadRoutines = async () => {
       try {
         const storedRoutines = await AsyncStorage.getItem(STORAGE_KEY);
-        if (storedRoutines) {
-          setRoutines(JSON.parse(storedRoutines));
+        const lastReset = await AsyncStorage.getItem(LAST_RESET_KEY);
+        const today = new Date().toISOString().split("T")[0];
+
+        let parsed: Routine[] = storedRoutines ? JSON.parse(storedRoutines) : [];
+
+        if (lastReset !== today && parsed.length > 0) {
+          parsed = parsed.map(r => ({
+            ...r,
+            exercises: r.exercises.map(e => ({ ...e, completed: false })),
+          }));
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+          await AsyncStorage.setItem(LAST_RESET_KEY, today);
+        }
+
+        if (parsed.length > 0) {
+          setRoutines(parsed);
         } else {
           const defaultRoutines: Routine[] = [
             {
@@ -64,6 +79,7 @@ export function RoutineManager() {
           ];
           setRoutines(defaultRoutines);
           await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(defaultRoutines));
+          await AsyncStorage.setItem(LAST_RESET_KEY, today);
         }
       } catch (error) {
         console.log("Error cargando rutinas:", error);
