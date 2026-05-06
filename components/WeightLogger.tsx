@@ -9,6 +9,7 @@ interface WeightEntry {
   id: string;
   exercise: string;
   weight: number;
+  reps: number;
   date: string;
 }
 
@@ -36,6 +37,11 @@ const formatDateInput = (text: string): string => {
   if (digits.length <= 2) return digits;
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+};
+
+const calc1RM = (weight: number, reps: number): number => {
+  if (reps === 1) return weight;
+  return Math.round(weight * (1 + reps / 30));
 };
 
 function WeightChart({ entries, colors }: { entries: WeightEntry[], colors: any }) {
@@ -68,12 +74,9 @@ function WeightChart({ entries, colors }: { entries: WeightEntry[], colors: any 
     <Svg width={width} height={height}>
       <Line x1={paddingX} y1={paddingY} x2={paddingX} y2={height - paddingY} stroke={colors.border} strokeWidth="1" />
       <Line x1={paddingX} y1={height - paddingY} x2={width - paddingX} y2={height - paddingY} stroke={colors.border} strokeWidth="1" />
-
       <SvgText x={paddingX - 4} y={paddingY + 4} fontSize="10" fill={colors.textSecondary} textAnchor="end">{maxW}kg</SvgText>
       <SvgText x={paddingX - 4} y={height - paddingY + 4} fontSize="10" fill={colors.textSecondary} textAnchor="end">{minW}kg</SvgText>
-
       <Polyline points={polylinePoints} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-
       {points.map((p, i) => (
         <React.Fragment key={i}>
           <Circle cx={p.x} cy={p.y} r={4} fill="#3b82f6" />
@@ -94,6 +97,7 @@ export function WeightLogger() {
   const [exerciseOrder, setExerciseOrder] = useState<string[]>([]);
   const [exercise, setExercise] = useState("");
   const [weight, setWeight] = useState("");
+  const [reps, setReps] = useState("");
   const [date, setDate] = useState(todaySpanish());
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [chartModal, setChartModal] = useState(false);
@@ -102,8 +106,10 @@ export function WeightLogger() {
   const [updateModal, setUpdateModal] = useState(false);
   const [selected, setSelected] = useState<WeightEntry | null>(null);
   const [editWeight, setEditWeight] = useState("");
+  const [editReps, setEditReps] = useState("");
   const [editDate, setEditDate] = useState("");
   const [newWeight, setNewWeight] = useState("");
+  const [newReps, setNewReps] = useState("");
   const [newDate, setNewDate] = useState(todaySpanish());
 
   useEffect(() => {
@@ -146,33 +152,37 @@ export function WeightLogger() {
     if (!exercise || !weight || !date) return;
     const isoDate = toISO(date);
     if (!isoDate) return;
-    save([{ id: Date.now().toString(), exercise, weight: parseFloat(weight), date: isoDate }, ...entries]);
+    save([{ id: Date.now().toString(), exercise, weight: parseFloat(weight), reps: parseInt(reps) || 1, date: isoDate }, ...entries]);
     if (!exerciseOrder.includes(exercise)) saveOrder([exercise, ...exerciseOrder]);
-    setExercise(""); setWeight(""); setDate(todaySpanish());
+    setExercise(""); setWeight(""); setReps(""); setDate(todaySpanish());
   };
 
   const openUpdate = (exerciseName: string) => {
-    setSelected({ id: "", exercise: exerciseName, weight: 0, date: "" });
-    setNewWeight(""); setNewDate(todaySpanish()); setUpdateModal(true);
+    setSelected({ id: "", exercise: exerciseName, weight: 0, reps: 1, date: "" });
+    setNewWeight(""); setNewReps(""); setNewDate(todaySpanish()); setUpdateModal(true);
   };
 
   const saveUpdate = () => {
     if (!selected || !newWeight) return;
     const isoDate = toISO(newDate);
     if (!isoDate) return;
-    save([{ id: Date.now().toString(), exercise: selected.exercise, weight: parseFloat(newWeight), date: isoDate }, ...entries]);
+    save([{ id: Date.now().toString(), exercise: selected.exercise, weight: parseFloat(newWeight), reps: parseInt(newReps) || 1, date: isoDate }, ...entries]);
     setUpdateModal(false);
   };
 
   const openEdit = (entry: WeightEntry) => {
-    setSelected(entry); setEditWeight(entry.weight.toString()); setEditDate(toSpanish(entry.date)); setEditModal(true);
+    setSelected(entry);
+    setEditWeight(entry.weight.toString());
+    setEditReps(entry.reps?.toString() || "1");
+    setEditDate(toSpanish(entry.date));
+    setEditModal(true);
   };
 
   const saveEdit = () => {
     if (!selected) return;
     const isoDate = toISO(editDate);
     if (!isoDate) return;
-    save(entries.map(e => e.id === selected.id ? { ...e, weight: parseFloat(editWeight), date: isoDate } : e));
+    save(entries.map(e => e.id === selected.id ? { ...e, weight: parseFloat(editWeight), reps: parseInt(editReps) || 1, date: isoDate } : e));
     setEditModal(false);
   };
 
@@ -182,6 +192,11 @@ export function WeightLogger() {
     if (list.length < 2) return 0;
     const sorted = [...list].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     return (((sorted[sorted.length - 1].weight - sorted[0].weight) / sorted[0].weight) * 100).toFixed(1);
+  };
+
+  const getBest1RM = (list: WeightEntry[]) => {
+    if (list.length === 0) return null;
+    return Math.max(...list.map(e => calc1RM(e.weight, e.reps || 1)));
   };
 
   const grouped = useMemo(() => {
@@ -207,11 +222,6 @@ export function WeightLogger() {
 
   const toggle = (ex: string) => setExpanded(prev => ({ ...prev, [ex]: !prev[ex] }));
 
-  const openChart = (ex: string) => {
-    setChartExercise(ex);
-    setChartModal(true);
-  };
-
   const inputStyle = {
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -228,7 +238,10 @@ export function WeightLogger() {
       <View style={[styles.card, { backgroundColor: colors.card }]}>
         <Text style={[styles.title, { color: colors.text }]}>Registrar peso</Text>
         <TextInput style={inputStyle} placeholder="Ejercicio" placeholderTextColor={colors.placeholder} value={exercise} onChangeText={setExercise} />
-        <TextInput style={inputStyle} placeholder="Peso (kg)" placeholderTextColor={colors.placeholder} keyboardType="numeric" value={weight} onChangeText={setWeight} />
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <TextInput style={[inputStyle, { flex: 1 }]} placeholder="Peso (kg)" placeholderTextColor={colors.placeholder} keyboardType="numeric" value={weight} onChangeText={setWeight} />
+          <TextInput style={[inputStyle, { flex: 1 }]} placeholder="Reps" placeholderTextColor={colors.placeholder} keyboardType="number-pad" value={reps} onChangeText={setReps} />
+        </View>
         <TextInput style={inputStyle} value={date} onChangeText={t => setDate(formatDateInput(t))} placeholder="DD/MM/AA" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={8} />
         <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={addEntry}>
           <Text style={{ color: "white" }}>Añadir</Text>
@@ -240,13 +253,19 @@ export function WeightLogger() {
         const sorted = [...list].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         const open = expanded[ex];
         const visible = open ? sorted : sorted.slice(0, 2);
+        const best1RM = getBest1RM(list);
 
         return (
           <View key={ex} style={[styles.card, { backgroundColor: colors.card }]}>
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
               <View>
                 <Text style={{ fontWeight: "bold", fontSize: 16, color: colors.text }}>{ex}</Text>
-                <Text style={{ color: "green" }}>+{getProgress(list)}%</Text>
+                <Text style={{ color: "green", fontSize: 12 }}>+{getProgress(list)}%</Text>
+                {best1RM && (
+                  <Text style={{ color: "#3b82f6", fontSize: 12, marginTop: 2 }}>
+                    1RM est: {best1RM} kg
+                  </Text>
+                )}
               </View>
               <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <View style={{ marginRight: 6 }}>
@@ -257,7 +276,7 @@ export function WeightLogger() {
                     <MaterialCommunityIcons name="chevron-down" size={18} color={index === orderedExercises.length - 1 ? colors.border : colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => openChart(ex)} style={{ marginRight: 6 }}>
+                <TouchableOpacity onPress={() => { setChartExercise(ex); setChartModal(true); }} style={{ marginRight: 6 }}>
                   <MaterialCommunityIcons name="chart-line" size={22} color={colors.text} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => openUpdate(ex)}>
@@ -272,7 +291,12 @@ export function WeightLogger() {
             {visible.map(e => (
               <View key={e.id} style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
                 <View>
-                  <Text style={{ color: colors.text }}>{e.weight} kg</Text>
+                  <Text style={{ color: colors.text }}>
+                    {e.weight} kg {e.reps ? `× ${e.reps} reps` : ""}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: "#3b82f6" }}>
+                    1RM est: {calc1RM(e.weight, e.reps || 1)} kg
+                  </Text>
                   <Text style={{ fontSize: 12, color: colors.textSecondary }}>{toSpanish(e.date)}</Text>
                 </View>
                 <View style={{ flexDirection: "row" }}>
@@ -296,13 +320,8 @@ export function WeightLogger() {
             <TouchableOpacity onPress={() => setChartModal(false)} style={{ marginBottom: 10 }}>
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={{ fontSize: 18, fontWeight: "bold", color: colors.text, marginBottom: 16 }}>
-              {chartExercise}
-            </Text>
-            <WeightChart
-              entries={grouped.get(chartExercise) || []}
-              colors={colors}
-            />
+            <Text style={{ fontSize: 18, fontWeight: "bold", color: colors.text, marginBottom: 16 }}>{chartExercise}</Text>
+            <WeightChart entries={grouped.get(chartExercise) || []} colors={colors} />
           </View>
         </View>
       </Modal>
@@ -314,7 +333,10 @@ export function WeightLogger() {
             <TouchableOpacity onPress={() => setEditModal(false)} style={{ marginBottom: 10 }}>
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
-            <TextInput style={inputStyle} value={editWeight} onChangeText={setEditWeight} keyboardType="numeric" placeholder="Peso (kg)" placeholderTextColor={colors.placeholder} />
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TextInput style={[inputStyle, { flex: 1 }]} value={editWeight} onChangeText={setEditWeight} keyboardType="numeric" placeholder="Peso (kg)" placeholderTextColor={colors.placeholder} />
+              <TextInput style={[inputStyle, { flex: 1 }]} value={editReps} onChangeText={setEditReps} keyboardType="number-pad" placeholder="Reps" placeholderTextColor={colors.placeholder} />
+            </View>
             <TextInput style={inputStyle} value={editDate} onChangeText={t => setEditDate(formatDateInput(t))} placeholder="DD/MM/AA" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={8} />
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={saveEdit}>
               <Text style={{ color: "white" }}>Guardar</Text>
@@ -330,7 +352,10 @@ export function WeightLogger() {
             <TouchableOpacity onPress={() => setUpdateModal(false)} style={{ marginBottom: 10 }}>
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
-            <TextInput style={inputStyle} placeholder="Nuevo peso (kg)" placeholderTextColor={colors.placeholder} value={newWeight} onChangeText={setNewWeight} keyboardType="numeric" />
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TextInput style={[inputStyle, { flex: 1 }]} placeholder="Nuevo peso (kg)" placeholderTextColor={colors.placeholder} value={newWeight} onChangeText={setNewWeight} keyboardType="numeric" />
+              <TextInput style={[inputStyle, { flex: 1 }]} placeholder="Reps" placeholderTextColor={colors.placeholder} value={newReps} onChangeText={setNewReps} keyboardType="number-pad" />
+            </View>
             <TextInput style={inputStyle} value={newDate} onChangeText={t => setNewDate(formatDateInput(t))} placeholder="DD/MM/AA" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={8} />
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={saveUpdate}>
               <Text style={{ color: "white" }}>Actualizar</Text>
