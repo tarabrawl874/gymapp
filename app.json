@@ -3,7 +3,7 @@
     "name": "E2GYM",
     "slug": "gym-app",
     "version": "1.0.5",
-    "note":"calendario y arrastrar",
+    "note":"correccion de fallos y logo actualizado",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
