@@ -1,422 +1,407 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet, Modal, BackHandler, Dimensions } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, BackHandler } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "./ThemeContext";
-import Svg, { Polyline, Circle, Line, Text as SvgText } from "react-native-svg";
+import { WORKOUT_LOG_KEY } from "./CalendarView";
 
-interface WeightEntry {
-  id: string;
-  exercise: string;
-  weight: number;
+interface Exercise {
+  name: string;
+  sets: number;
   reps: number;
-  date: string;
+  completed?: boolean;
 }
 
-const STORAGE_KEY = "@weight_entries";
-const ORDER_KEY = "@weight_order";
-
-const toSpanish = (iso: string) => {
-  const d = new Date(iso);
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = String(d.getFullYear()).slice(-2);
-  return `${day}/${month}/${year}`;
-};
-
-const toISO = (spanish: string): string => {
-  const [day, month, year] = spanish.split("/");
-  if (!day || !month || !year) return "";
-  return `20${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-};
-
-const todaySpanish = () => toSpanish(new Date().toISOString().split("T")[0]);
-
-const formatDateInput = (text: string): string => {
-  const digits = text.replace(/\D/g, "").slice(0, 6);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-};
-
-const calc1RM = (weight: number, reps: number): number => {
-  if (reps === 1) return weight;
-  return Math.round(weight * (1 + reps / 30));
-};
-
-function WeightChart({ entries, colors }: { entries: WeightEntry[], colors: any }) {
-  const sorted = [...entries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  if (sorted.length < 2) return (
-    <View style={{ alignItems: "center", padding: 20 }}>
-      <Text style={{ color: colors.textSecondary }}>Necesitas al menos 2 registros para ver la gráfica</Text>
-    </View>
-  );
-
-  const width = Dimensions.get("window").width - 80;
-  const height = 180;
-  const paddingX = 40;
-  const paddingY = 20;
-
-  const weights = sorted.map(e => e.weight);
-  const minW = Math.min(...weights);
-  const maxW = Math.max(...weights);
-  const range = maxW - minW || 1;
-
-  const points = sorted.map((e, i) => {
-    const x = paddingX + (i / (sorted.length - 1)) * (width - paddingX * 2);
-    const y = paddingY + ((maxW - e.weight) / range) * (height - paddingY * 2);
-    return { x, y, entry: e };
-  });
-
-  const polylinePoints = points.map(p => `${p.x},${p.y}`).join(" ");
-
-  return (
-    <Svg width={width} height={height}>
-      <Line x1={paddingX} y1={paddingY} x2={paddingX} y2={height - paddingY} stroke={colors.border} strokeWidth="1" />
-      <Line x1={paddingX} y1={height - paddingY} x2={width - paddingX} y2={height - paddingY} stroke={colors.border} strokeWidth="1" />
-      <SvgText x={paddingX - 4} y={paddingY + 4} fontSize="10" fill={colors.textSecondary} textAnchor="end">{maxW}kg</SvgText>
-      <SvgText x={paddingX - 4} y={height - paddingY + 4} fontSize="10" fill={colors.textSecondary} textAnchor="end">{minW}kg</SvgText>
-      <Polyline points={polylinePoints} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-      {points.map((p, i) => (
-        <React.Fragment key={i}>
-          <Circle cx={p.x} cy={p.y} r={4} fill="#3b82f6" />
-          {i === 0 || i === points.length - 1 ? (
-            <SvgText x={p.x} y={height - paddingY + 14} fontSize="9" fill={colors.textSecondary} textAnchor="middle">
-              {toSpanish(p.entry.date)}
-            </SvgText>
-          ) : null}
-        </React.Fragment>
-      ))}
-    </Svg>
-  );
+interface Routine {
+  id: string;
+  name: string;
+  description: string;
+  exercises: Exercise[];
 }
 
-export function WeightLogger() {
+const STORAGE_KEY = "@routines";
+const LAST_RESET_KEY = "@last_reset";
+
+export function RoutineManager() {
   const { colors } = useTheme();
-  const [entries, setEntries] = useState<WeightEntry[]>([]);
-  const [exerciseOrder, setExerciseOrder] = useState<string[]>([]);
-  const [exercise, setExercise] = useState("");
-  const [weight, setWeight] = useState("");
-  const [reps, setReps] = useState("");
-  const [date, setDate] = useState(todaySpanish());
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [chartModal, setChartModal] = useState(false);
-  const [chartExercise, setChartExercise] = useState<string>("");
-  const [editModal, setEditModal] = useState(false);
-  const [updateModal, setUpdateModal] = useState(false);
-  const [selected, setSelected] = useState<WeightEntry | null>(null);
-  const [editWeight, setEditWeight] = useState("");
-  const [editReps, setEditReps] = useState("");
-  const [editDate, setEditDate] = useState("");
-  const [newWeight, setNewWeight] = useState("");
-  const [newReps, setNewReps] = useState("");
-  const [newDate, setNewDate] = useState(todaySpanish());
+  const [routines, setRoutines] = useState<Routine[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
+  const [newRoutineName, setNewRoutineName] = useState("");
+  const [newRoutineDesc, setNewRoutineDesc] = useState("");
+  const [newExercises, setNewExercises] = useState<Exercise[]>([]);
+  const [exerciseName, setExerciseName] = useState("");
+  const [exerciseSets, setExerciseSets] = useState("");
+  const [exerciseReps, setExerciseReps] = useState("");
+
+  const [editExerciseModal, setEditExerciseModal] = useState(false);
+  const [editingExerciseIndex, setEditingExerciseIndex] = useState<number | null>(null);
+  const [editExName, setEditExName] = useState("");
+  const [editExSets, setEditExSets] = useState("");
+  const [editExReps, setEditExReps] = useState("");
 
   useEffect(() => {
-    const load = async () => {
-      const data = await AsyncStorage.getItem(STORAGE_KEY);
-      const order = await AsyncStorage.getItem(ORDER_KEY);
-      if (data) setEntries(JSON.parse(data));
-      if (order) setExerciseOrder(JSON.parse(order));
+    const loadRoutines = async () => {
+      try {
+        const storedRoutines = await AsyncStorage.getItem(STORAGE_KEY);
+        const lastReset = await AsyncStorage.getItem(LAST_RESET_KEY);
+        const today = new Date().toISOString().split("T")[0];
+
+        let parsed: Routine[] = storedRoutines ? JSON.parse(storedRoutines) : [];
+
+        if (lastReset !== today && parsed.length > 0) {
+          parsed = parsed.map(r => ({
+            ...r,
+            exercises: r.exercises.map(e => ({ ...e, completed: false })),
+          }));
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+          await AsyncStorage.setItem(LAST_RESET_KEY, today);
+        }
+
+        if (parsed.length > 0) {
+          setRoutines(parsed);
+        } else {
+          const defaultRoutines: Routine[] = [
+            {
+              id: "1",
+              name: "Día de Pecho",
+              description: "Rutina completa para pecho y tríceps",
+              exercises: [
+                { name: "Press de Banca", sets: 4, reps: 10, completed: false },
+                { name: "Press Inclinado", sets: 3, reps: 12, completed: false },
+                { name: "Fondos", sets: 3, reps: 15, completed: false },
+              ],
+            },
+            {
+              id: "2",
+              name: "Día de Pierna",
+              description: "Rutina enfocada en piernas",
+              exercises: [
+                { name: "Sentadillas", sets: 4, reps: 8, completed: false },
+                { name: "Peso Muerto", sets: 4, reps: 6, completed: false },
+                { name: "Zancadas", sets: 3, reps: 12, completed: false },
+              ],
+            },
+          ];
+          setRoutines(defaultRoutines);
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(defaultRoutines));
+          await AsyncStorage.setItem(LAST_RESET_KEY, today);
+        }
+      } catch (error) {
+        console.log("Error cargando rutinas:", error);
+      }
     };
-    load();
+    loadRoutines();
   }, []);
 
   useEffect(() => {
     const backAction = () => {
-      if (chartModal) { setChartModal(false); return true; }
-      if (editModal) { setEditModal(false); return true; }
+      if (editExerciseModal) { setEditExerciseModal(false); return true; }
+      if (modalVisible) { setModalVisible(false); return true; }
       return false;
     };
     const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
     return () => backHandler.remove();
-  }, [chartModal, editModal]);
+  }, [modalVisible, editExerciseModal]);
 
-  useEffect(() => {
-    const backAction = () => { if (updateModal) { setUpdateModal(false); return true; } return false; };
-    const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
-    return () => backHandler.remove();
-  }, [updateModal]);
-
-  const save = async (data: WeightEntry[]) => {
-    setEntries(data);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  const saveRoutines = async (newRoutines: Routine[]) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newRoutines));
+    } catch (error) {
+      console.log("Error guardando rutinas:", error);
+    }
   };
 
-  const saveOrder = async (order: string[]) => {
-    setExerciseOrder(order);
-    await AsyncStorage.setItem(ORDER_KEY, JSON.stringify(order));
-  };
-
-  const addEntry = () => {
-    if (!exercise || !weight || !date) return;
-    const isoDate = toISO(date);
-    if (!isoDate) return;
-    save([{ id: Date.now().toString(), exercise, weight: parseFloat(weight), reps: parseInt(reps) || 1, date: isoDate }, ...entries]);
-    if (!exerciseOrder.includes(exercise)) saveOrder([exercise, ...exerciseOrder]);
-    setExercise(""); setWeight(""); setReps(""); setDate(todaySpanish());
-  };
-
-  const openUpdate = (exerciseName: string) => {
-    setSelected({ id: "", exercise: exerciseName, weight: 0, reps: 1, date: "" });
-    setNewWeight(""); setNewReps(""); setNewDate(todaySpanish()); setUpdateModal(true);
-  };
-
-  const saveUpdate = () => {
-    if (!selected || !newWeight) return;
-    const isoDate = toISO(newDate);
-    if (!isoDate) return;
-    save([{ id: Date.now().toString(), exercise: selected.exercise, weight: parseFloat(newWeight), reps: parseInt(newReps) || 1, date: isoDate }, ...entries]);
-    setUpdateModal(false);
-  };
-
-  const openEdit = (entry: WeightEntry) => {
-    setSelected(entry);
-    setEditWeight(entry.weight.toString());
-    setEditReps(entry.reps?.toString() || "1");
-    setEditDate(toSpanish(entry.date));
-    setEditModal(true);
-  };
-
-  const saveEdit = () => {
-    if (!selected) return;
-    const isoDate = toISO(editDate);
-    if (!isoDate) return;
-    save(entries.map(e => e.id === selected.id ? { ...e, weight: parseFloat(editWeight), reps: parseInt(editReps) || 1, date: isoDate } : e));
-    setEditModal(false);
-  };
-
-  const deleteEntry = (id: string) => save(entries.filter(e => e.id !== id));
-
-  const getProgress = (list: WeightEntry[]) => {
-    if (list.length < 2) return 0;
-    const sorted = [...list].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    return (((sorted[sorted.length - 1].weight - sorted[0].weight) / sorted[0].weight) * 100).toFixed(1);
-  };
-
-  const getBest1RM = (list: WeightEntry[]) => {
-    if (list.length === 0) return null;
-    return Math.max(...list.map(e => calc1RM(e.weight, e.reps || 1)));
-  };
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, WeightEntry[]>();
-    entries.forEach(e => { const list = map.get(e.exercise) || []; map.set(e.exercise, [e, ...list]); });
-    return map;
-  }, [entries]);
-
-  const orderedExercises = useMemo(() => {
-    const all = Array.from(grouped.keys());
-    const ordered = exerciseOrder.filter(ex => all.includes(ex));
-    const newOnes = all.filter(ex => !exerciseOrder.includes(ex));
-    return [...newOnes, ...ordered];
-  }, [grouped, exerciseOrder]);
-
-  const moveExercise = (index: number, direction: "up" | "down") => {
-    const newOrder = [...orderedExercises];
+  const moveRoutine = (index: number, direction: "up" | "down") => {
+    const newRoutines = [...routines];
     const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= newOrder.length) return;
-    [newOrder[index], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[index]];
-    saveOrder(newOrder);
+    if (targetIndex < 0 || targetIndex >= newRoutines.length) return;
+    [newRoutines[index], newRoutines[targetIndex]] = [newRoutines[targetIndex], newRoutines[index]];
+    setRoutines(newRoutines);
+    saveRoutines(newRoutines);
   };
 
-  const toggle = (ex: string) => setExpanded(prev => ({ ...prev, [ex]: !prev[ex] }));
+  const handleAddExercise = () => {
+    if (exerciseName && exerciseSets && exerciseReps) {
+      setNewExercises([...newExercises, { name: exerciseName, sets: parseInt(exerciseSets), reps: parseInt(exerciseReps), completed: false }]);
+      setExerciseName(""); setExerciseSets(""); setExerciseReps("");
+    }
+  };
+
+  const openEditModal = (routine: Routine) => {
+    setEditingRoutineId(routine.id);
+    setNewRoutineName(routine.name);
+    setNewRoutineDesc(routine.description);
+    setNewExercises([...routine.exercises]);
+    setModalVisible(true);
+  };
+
+  const handleSaveRoutine = () => {
+    if (!newRoutineName || newExercises.length === 0) return;
+    if (editingRoutineId) {
+      const updatedRoutines = routines.map(r =>
+        r.id === editingRoutineId
+          ? { ...r, name: newRoutineName, description: newRoutineDesc, exercises: newExercises }
+          : r
+      );
+      setRoutines(updatedRoutines);
+      saveRoutines(updatedRoutines);
+    } else {
+      const newRoutine: Routine = {
+        id: Date.now().toString(),
+        name: newRoutineName,
+        description: newRoutineDesc,
+        exercises: newExercises,
+      };
+      const updatedRoutines = [newRoutine, ...routines];
+      setRoutines(updatedRoutines);
+      saveRoutines(updatedRoutines);
+    }
+    closeModal();
+  };
+
+  const handleDeleteRoutine = (id: string) => {
+    const updatedRoutines = routines.filter(r => r.id !== id);
+    setRoutines(updatedRoutines);
+    saveRoutines(updatedRoutines);
+  };
+
+  const toggleExerciseCompleted = async (routineId: string, exerciseIndex: number) => {
+    const updatedRoutines = routines.map(r => {
+      if (r.id === routineId) {
+        const updatedExercises = [...r.exercises];
+        updatedExercises[exerciseIndex].completed = !updatedExercises[exerciseIndex].completed;
+        return { ...r, exercises: updatedExercises };
+      }
+      return r;
+    });
+    setRoutines(updatedRoutines);
+    saveRoutines(updatedRoutines);
+
+    const routine = updatedRoutines.find(r => r.id === routineId);
+    if (routine && routine.exercises.every(e => e.completed)) {
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const existing = await AsyncStorage.getItem(WORKOUT_LOG_KEY);
+      const logs = existing ? JSON.parse(existing) : [];
+      const alreadyLogged = logs.find((l: any) => l.date === dateStr && l.routineName === routine.name);
+      if (!alreadyLogged) {
+        logs.push({ date: dateStr, routineName: routine.name });
+        await AsyncStorage.setItem(WORKOUT_LOG_KEY, JSON.stringify(logs));
+      }
+    }
+  };
+
+  const openEditExercise = (index: number, exercise: Exercise) => {
+    setEditingExerciseIndex(index);
+    setEditExName(exercise.name);
+    setEditExSets(exercise.sets.toString());
+    setEditExReps(exercise.reps.toString());
+    setEditExerciseModal(true);
+  };
+
+  const saveEditExercise = () => {
+    if (editingExerciseIndex === null || !editExName || !editExSets || !editExReps) return;
+    const updatedExercises = [...newExercises];
+    updatedExercises[editingExerciseIndex] = {
+      ...updatedExercises[editingExerciseIndex],
+      name: editExName,
+      sets: parseInt(editExSets),
+      reps: parseInt(editExReps),
+    };
+    setNewExercises(updatedExercises);
+    setEditExerciseModal(false);
+  };
+
+  const closeModal = () => {
+    setEditingRoutineId(null);
+    setNewRoutineName("");
+    setNewRoutineDesc("");
+    setNewExercises([]);
+    setExerciseName(""); setExerciseSets(""); setExerciseReps("");
+    setModalVisible(false);
+  };
 
   const inputStyle = {
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    padding: 8,
-    marginBottom: 10,
     borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
     color: colors.text,
     backgroundColor: colors.background,
   };
 
   return (
-    <ScrollView style={{ flex: 1, padding: 10, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, margin: 10 }]} onPress={() => setModalVisible(true)}>
+        <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
+        <Text style={styles.buttonText}>Crear rutina</Text>
+      </TouchableOpacity>
 
-      <View style={[styles.card, { backgroundColor: colors.card }]}>
-        <Text style={[styles.title, { color: colors.text }]}>Registrar peso</Text>
-        <TextInput style={inputStyle} placeholder="Ejercicio" placeholderTextColor={colors.placeholder} value={exercise} onChangeText={setExercise} />
-
-        {/* FIX desbordamiento */}
-        <View style={{ flexDirection: "row", width: "100%" }}>
-          <TextInput
-            style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
-            placeholder="Peso (kg)"
-            placeholderTextColor={colors.placeholder}
-            keyboardType="numeric"
-            value={weight}
-            onChangeText={setWeight}
-          />
-          <TextInput
-            style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
-            placeholder="Reps"
-            placeholderTextColor={colors.placeholder}
-            keyboardType="number-pad"
-            value={reps}
-            onChangeText={setReps}
-          />
-        </View>
-
-        <TextInput style={inputStyle} value={date} onChangeText={t => setDate(formatDateInput(t))} placeholder="DD/MM/AA" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={8} />
-        <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={addEntry}>
-          <Text style={{ color: "white" }}>Añadir</Text>
-        </TouchableOpacity>
-      </View>
-
-      {orderedExercises.map((ex, index) => {
-        const list = grouped.get(ex) || [];
-        const sorted = [...list].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        const open = expanded[ex];
-        const visible = open ? sorted : sorted.slice(0, 2);
-        const best1RM = getBest1RM(list);
-
-        return (
-          <View key={ex} style={[styles.card, { backgroundColor: colors.card }]}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <View>
-                <Text style={{ fontWeight: "bold", fontSize: 16, color: colors.text }}>{ex}</Text>
-                <Text style={{ color: "green", fontSize: 12 }}>+{getProgress(list)}%</Text>
-                {best1RM && (
-                  <Text style={{ color: "#3b82f6", fontSize: 12, marginTop: 2 }}>
-                    1RM est: {best1RM} kg
-                  </Text>
-                )}
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={{ marginRight: 6 }}>
-                  <TouchableOpacity onPress={() => moveExercise(index, "up")} disabled={index === 0}>
-                    <MaterialCommunityIcons name="chevron-up" size={18} color={index === 0 ? colors.border : colors.textSecondary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => moveExercise(index, "down")} disabled={index === orderedExercises.length - 1}>
-                    <MaterialCommunityIcons name="chevron-down" size={18} color={index === orderedExercises.length - 1 ? colors.border : colors.textSecondary} />
-                  </TouchableOpacity>
+      <ScrollView style={{ marginTop: 4 }}>
+        {routines.map((routine, index) => {
+          const allCompleted = routine.exercises.length > 0 && routine.exercises.every(e => e.completed);
+          return (
+            <View key={routine.id} style={[styles.card, { backgroundColor: colors.card }]}>
+              <View style={styles.cardHeader}>
+                <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
+                  {allCompleted && (
+                    <MaterialCommunityIcons name="check-circle" size={20} color="#22c55e" style={{ marginRight: 6 }} />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.routineTitle, { color: colors.text }]}>{routine.name}</Text>
+                    <Text style={{ color: colors.textSecondary }}>{routine.description}</Text>
+                  </View>
                 </View>
-                <TouchableOpacity onPress={() => { setChartExercise(ex); setChartModal(true); }} style={{ marginRight: 6 }}>
-                  <MaterialCommunityIcons name="chart-line" size={22} color={colors.text} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => openUpdate(ex)}>
-                  <MaterialCommunityIcons name="plus-circle-outline" size={22} color={colors.text} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => toggle(ex)} style={{ marginLeft: 10 }}>
-                  <MaterialCommunityIcons name={open ? "chevron-up" : "chevron-down"} size={22} color={colors.text} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {visible.map(e => (
-              <View key={e.id} style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
-                <View>
-                  <Text style={{ color: colors.text }}>
-                    {e.weight} kg {e.reps ? `× ${e.reps} reps` : ""}
-                  </Text>
-                  <Text style={{ fontSize: 11, color: "#3b82f6" }}>
-                    1RM est: {calc1RM(e.weight, e.reps || 1)} kg
-                  </Text>
-                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>{toSpanish(e.date)}</Text>
-                </View>
-                <View style={{ flexDirection: "row" }}>
-                  <TouchableOpacity onPress={() => openEdit(e)} style={{ marginRight: 10 }}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <View style={{ marginRight: 6 }}>
+                    <TouchableOpacity onPress={() => moveRoutine(index, "up")} disabled={index === 0}>
+                      <MaterialCommunityIcons name="chevron-up" size={20} color={index === 0 ? colors.border : colors.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => moveRoutine(index, "down")} disabled={index === routines.length - 1}>
+                      <MaterialCommunityIcons name="chevron-down" size={20} color={index === routines.length - 1 ? colors.border : colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity onPress={() => openEditModal(routine)} style={{ marginRight: 10 }}>
                     <MaterialCommunityIcons name="pencil-outline" size={20} color={colors.textSecondary} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => deleteEntry(e.id)}>
+                  <TouchableOpacity onPress={() => handleDeleteRoutine(routine.id)}>
                     <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
               </View>
-            ))}
-          </View>
-        );
-      })}
 
-      {/* Modal gráfica */}
-      <Modal visible={chartModal} transparent animationType="fade" onRequestClose={() => setChartModal(false)}>
-        <View style={[styles.modalBg, { backgroundColor: colors.modalBg }]}>
-          <View style={[styles.modal, { backgroundColor: colors.card }]}>
-            <TouchableOpacity onPress={() => setChartModal(false)} style={{ marginBottom: 10 }}>
+              <View style={{ marginTop: 8 }}>
+                {routine.exercises.map((ex, i) => (
+                  <TouchableOpacity key={i} style={styles.exerciseRow} onPress={() => toggleExerciseCompleted(routine.id, i)}>
+                    <MaterialCommunityIcons
+                      name={ex.completed ? "check-circle" : "checkbox-blank-circle-outline"}
+                      size={16}
+                      color={ex.completed ? "#22c55e" : colors.textSecondary}
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text style={{ color: colors.text, flex: 1 }}>{ex.name}</Text>
+                    <Text style={{ color: colors.textSecondary }}>{ex.sets}×{ex.reps}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+
+      <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={closeModal}>
+        <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
+          <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
+            <TouchableOpacity onPress={closeModal} style={{ marginBottom: 10 }}>
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={{ fontSize: 18, fontWeight: "bold", color: colors.text, marginBottom: 16 }}>{chartExercise}</Text>
-            <WeightChart entries={grouped.get(chartExercise) || []} colors={colors} />
-          </View>
-        </View>
-      </Modal>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{editingRoutineId ? "Editar rutina" : "Nueva rutina"}</Text>
+            <TextInput placeholder="Nombre de la rutina" style={inputStyle} value={newRoutineName} onChangeText={setNewRoutineName} placeholderTextColor={colors.placeholder} />
+            <TextInput placeholder="Descripción" style={[inputStyle, { height: 60 }]} value={newRoutineDesc} onChangeText={setNewRoutineDesc} multiline placeholderTextColor={colors.placeholder} />
+            <Text style={{ fontWeight: "bold", marginTop: 10, color: colors.text }}>Añadir ejercicios:</Text>
+            <TextInput placeholder="Nombre del ejercicio" style={inputStyle} value={exerciseName} onChangeText={setExerciseName} placeholderTextColor={colors.placeholder} />
 
-      {/* Modal editar */}
-      <Modal visible={editModal} transparent onRequestClose={() => setEditModal(false)}>
-        <View style={[styles.modalBg, { backgroundColor: colors.modalBg }]}>
-          <View style={[styles.modal, { backgroundColor: colors.card }]}>
-            <TouchableOpacity onPress={() => setEditModal(false)} style={{ marginBottom: 10 }}>
-              <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
-            </TouchableOpacity>
             <View style={{ flexDirection: "row", width: "100%" }}>
               <TextInput
+                placeholder="Series"
                 style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
-                value={editWeight}
-                onChangeText={setEditWeight}
-                keyboardType="numeric"
-                placeholder="Peso (kg)"
+                keyboardType="number-pad"
+                value={exerciseSets}
+                onChangeText={setExerciseSets}
                 placeholderTextColor={colors.placeholder}
               />
               <TextInput
-                style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
-                value={editReps}
-                onChangeText={setEditReps}
-                keyboardType="number-pad"
                 placeholder="Reps"
+                style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
+                keyboardType="number-pad"
+                value={exerciseReps}
+                onChangeText={setExerciseReps}
                 placeholderTextColor={colors.placeholder}
               />
             </View>
-            <TextInput style={inputStyle} value={editDate} onChangeText={t => setEditDate(formatDateInput(t))} placeholder="DD/MM/AA" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={8} />
-            <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={saveEdit}>
-              <Text style={{ color: "white" }}>Guardar</Text>
+
+            <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 10 }]} onPress={handleAddExercise}>
+              <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
+              <Text style={styles.buttonText}>Añadir ejercicio</Text>
+            </TouchableOpacity>
+
+            {newExercises.length > 0 && (
+              <View style={{ marginTop: 10 }}>
+                {newExercises.map((ex, i) => (
+                  <View key={i} style={[styles.exerciseRow, { borderBottomColor: colors.border, borderBottomWidth: 0.5 }]}>
+                    <Text style={{ color: colors.text, flex: 1 }}>{ex.name} ({ex.sets}×{ex.reps})</Text>
+                    <TouchableOpacity onPress={() => openEditExercise(i, ex)} style={{ marginRight: 10 }}>
+                      <MaterialCommunityIcons name="pencil-outline" size={18} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setNewExercises(newExercises.filter((_, idx) => idx !== i))}>
+                      <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 20 }]} onPress={handleSaveRoutine}>
+              <Text style={styles.buttonText}>{editingRoutineId ? "Guardar cambios" : "Crear rutina"}</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Modal actualizar */}
-      <Modal visible={updateModal} transparent onRequestClose={() => setUpdateModal(false)}>
-        <View style={[styles.modalBg, { backgroundColor: colors.modalBg }]}>
-          <View style={[styles.modal, { backgroundColor: colors.card }]}>
-            <TouchableOpacity onPress={() => setUpdateModal(false)} style={{ marginBottom: 10 }}>
+      <Modal visible={editExerciseModal} transparent animationType="fade" onRequestClose={() => setEditExerciseModal(false)}>
+        <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
+          <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
+            <TouchableOpacity onPress={() => setEditExerciseModal(false)} style={{ marginBottom: 10 }}>
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Editar ejercicio</Text>
+            <TextInput
+              placeholder="Nombre del ejercicio"
+              style={inputStyle}
+              value={editExName}
+              onChangeText={setEditExName}
+              placeholderTextColor={colors.placeholder}
+            />
             <View style={{ flexDirection: "row", width: "100%" }}>
               <TextInput
+                placeholder="Series"
                 style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
-                placeholder="Nuevo peso (kg)"
+                keyboardType="number-pad"
+                value={editExSets}
+                onChangeText={setEditExSets}
                 placeholderTextColor={colors.placeholder}
-                value={newWeight}
-                onChangeText={setNewWeight}
-                keyboardType="numeric"
               />
               <TextInput
-                style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
                 placeholder="Reps"
-                placeholderTextColor={colors.placeholder}
-                value={newReps}
-                onChangeText={setNewReps}
+                style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
                 keyboardType="number-pad"
+                value={editExReps}
+                onChangeText={setEditExReps}
+                placeholderTextColor={colors.placeholder}
               />
             </View>
-            <TextInput style={inputStyle} value={newDate} onChangeText={t => setNewDate(formatDateInput(t))} placeholder="DD/MM/AA" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={8} />
-            <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={saveUpdate}>
-              <Text style={{ color: "white" }}>Actualizar</Text>
+            <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 10 }]} onPress={saveEditExercise}>
+              <Text style={styles.buttonText}>Guardar cambios</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { padding: 12, marginBottom: 10, borderRadius: 8 },
-  button: { padding: 10, borderRadius: 6, alignItems: "center" },
-  title: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
-  modalBg: { flex: 1, justifyContent: "center", padding: 20 },
-  modal: { padding: 15, borderRadius: 10 },
+  button: { flexDirection: "row", padding: 10, borderRadius: 6, alignItems: "center", justifyContent: "center" },
+  buttonText: { color: "white", fontWeight: "bold" },
+  modalBackground: { flex: 1, justifyContent: "center", padding: 16 },
+  modalContainer: { borderRadius: 8, padding: 16, maxHeight: "85%" },
+  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
+  card: { borderRadius: 8, padding: 12, marginBottom: 10, marginHorizontal: 10, elevation: 2 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  routineTitle: { fontWeight: "bold", fontSize: 16 },
+  exerciseRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginVertical: 3 },
 });
