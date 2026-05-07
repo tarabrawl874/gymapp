@@ -34,6 +34,12 @@ export function RoutineManager() {
   const [exerciseSets, setExerciseSets] = useState("");
   const [exerciseReps, setExerciseReps] = useState("");
 
+  const [editExerciseModal, setEditExerciseModal] = useState(false);
+  const [editingExerciseIndex, setEditingExerciseIndex] = useState<number | null>(null);
+  const [editExName, setEditExName] = useState("");
+  const [editExSets, setEditExSets] = useState("");
+  const [editExReps, setEditExReps] = useState("");
+
   useEffect(() => {
     const loadRoutines = async () => {
       try {
@@ -90,12 +96,13 @@ export function RoutineManager() {
 
   useEffect(() => {
     const backAction = () => {
+      if (editExerciseModal) { setEditExerciseModal(false); return true; }
       if (modalVisible) { setModalVisible(false); return true; }
       return false;
     };
     const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
     return () => backHandler.remove();
-  }, [modalVisible]);
+  }, [modalVisible, editExerciseModal]);
 
   const saveRoutines = async (newRoutines: Routine[]) => {
     try {
@@ -185,6 +192,29 @@ export function RoutineManager() {
     }
   };
 
+  const openEditExercise = (index: number, exercise: Exercise) => {
+    setEditingExerciseIndex(index);
+    setEditExName(exercise.name);
+    setEditExSets(exercise.sets.toString());
+    setEditExReps(exercise.reps.toString());
+    setEditExerciseModal(true);
+  };
+
+  const saveEditExercise = () => {
+    if (editingExerciseIndex === null) return;
+    if (!editExName || !editExSets || !editExReps) return;
+
+    const updatedExercises = [...newExercises];
+    updatedExercises[editingExerciseIndex] = {
+      ...updatedExercises[editingExerciseIndex],
+      name: editExName,
+      sets: parseInt(editExSets),
+      reps: parseInt(editExReps),
+    };
+    setNewExercises(updatedExercises);
+    setEditExerciseModal(false);
+  };
+
   const closeModal = () => {
     setEditingRoutineId(null);
     setNewRoutineName("");
@@ -245,6 +275,7 @@ export function RoutineManager() {
                 </View>
               </View>
 
+              {/* Vista normal sin lápiz en ejercicios */}
               <View style={{ marginTop: 8 }}>
                 {routine.exercises.map((ex, i) => (
                   <TouchableOpacity key={i} style={styles.exerciseRow} onPress={() => toggleExerciseCompleted(routine.id, i)}>
@@ -264,6 +295,7 @@ export function RoutineManager() {
         })}
       </ScrollView>
 
+      {/* Modal crear/editar rutina */}
       <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={closeModal}>
         <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
           <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
@@ -283,11 +315,16 @@ export function RoutineManager() {
               <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
               <Text style={styles.buttonText}>Añadir ejercicio</Text>
             </TouchableOpacity>
+
+            {/* Lista de ejercicios con lápiz solo dentro del modal */}
             {newExercises.length > 0 && (
               <View style={{ marginTop: 10 }}>
                 {newExercises.map((ex, i) => (
                   <View key={i} style={[styles.exerciseRow, { borderBottomColor: colors.border, borderBottomWidth: 0.5 }]}>
-                    <Text style={{ color: colors.text }}>{ex.name} ({ex.sets}×{ex.reps})</Text>
+                    <Text style={{ color: colors.text, flex: 1 }}>{ex.name} ({ex.sets}×{ex.reps})</Text>
+                    <TouchableOpacity onPress={() => openEditExercise(i, ex)} style={{ marginRight: 10 }}>
+                      <MaterialCommunityIcons name="pencil-outline" size={18} color={colors.textSecondary} />
+                    </TouchableOpacity>
                     <TouchableOpacity onPress={() => setNewExercises(newExercises.filter((_, idx) => idx !== i))}>
                       <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
                     </TouchableOpacity>
@@ -295,12 +332,54 @@ export function RoutineManager() {
                 ))}
               </View>
             )}
+
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 20 }]} onPress={handleSaveRoutine}>
               <Text style={styles.buttonText}>{editingRoutineId ? "Guardar cambios" : "Crear rutina"}</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
+      {/* Modal editar ejercicio */}
+      <Modal visible={editExerciseModal} transparent animationType="fade" onRequestClose={() => setEditExerciseModal(false)}>
+        <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
+          <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
+            <TouchableOpacity onPress={() => setEditExerciseModal(false)} style={{ marginBottom: 10 }}>
+              <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Editar ejercicio</Text>
+            <TextInput
+              placeholder="Nombre del ejercicio"
+              style={inputStyle}
+              value={editExName}
+              onChangeText={setEditExName}
+              placeholderTextColor={colors.placeholder}
+            />
+            <View style={{ flexDirection: "row" }}>
+              <TextInput
+                placeholder="Series"
+                style={[inputStyle, { flex: 1, marginRight: 5 }]}
+                keyboardType="number-pad"
+                value={editExSets}
+                onChangeText={setEditExSets}
+                placeholderTextColor={colors.placeholder}
+              />
+              <TextInput
+                placeholder="Reps"
+                style={[inputStyle, { flex: 1, marginLeft: 5 }]}
+                keyboardType="number-pad"
+                value={editExReps}
+                onChangeText={setEditExReps}
+                placeholderTextColor={colors.placeholder}
+              />
+            </View>
+            <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 10 }]} onPress={saveEditExercise}>
+              <Text style={styles.buttonText}>Guardar cambios</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
