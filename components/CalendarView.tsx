@@ -4,9 +4,21 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "./ThemeContext";
 
+interface ExerciseLog {
+  name: string;
+  sets: number;
+  reps: number;
+  completed: boolean;
+}
+
 interface WorkoutLog {
   date: string;
+  routineId: string;
   routineName: string;
+  completedCount: number;
+  totalCount: number;
+  completed: boolean;
+  exercises: ExerciseLog[];
 }
 
 export const WORKOUT_LOG_KEY = "@workout_log";
@@ -60,11 +72,7 @@ export function CalendarView() {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      if (logs.find(l => l.date === dateStr)) {
-        count++;
-      } else if (i > 0) {
-        break;
-      }
+      if (logs.find(l => l.date === dateStr)) { count++; } else if (i > 0) { break; }
     }
     return count;
   };
@@ -72,26 +80,19 @@ export function CalendarView() {
   const longestStreak = () => {
     if (logs.length === 0) return 0;
     const uniqueDates = [...new Set(logs.map(l => l.date))].sort();
-    let max = 1;
-    let current = 1;
+    let max = 1, current = 1;
     for (let i = 1; i < uniqueDates.length; i++) {
       const prev = new Date(uniqueDates[i - 1]);
       const curr = new Date(uniqueDates[i]);
       const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
-      if (diff === 1) {
-        current++;
-        max = Math.max(max, current);
-      } else {
-        current = 1;
-      }
+      if (diff === 1) { current++; max = Math.max(max, current); } else { current = 1; }
     }
     return max;
   };
 
   const daysThisMonth = () => {
     const monthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-    const uniqueDays = new Set(logs.filter(l => l.date.startsWith(monthStr)).map(l => l.date));
-    return uniqueDays.size;
+    return new Set(logs.filter(l => l.date.startsWith(monthStr)).map(l => l.date)).size;
   };
 
   const mostFrequentRoutine = () => {
@@ -122,64 +123,55 @@ export function CalendarView() {
       {/* Estadísticas */}
       <View style={[styles.card, { backgroundColor: colors.card }]}>
         <Text style={{ fontWeight: "bold", fontSize: 16, color: colors.text, marginBottom: 12 }}>Estadísticas</Text>
-
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-
           <View style={[styles.statCard, { backgroundColor: colors.background }]}>
             <MaterialCommunityIcons name="calendar-month" size={22} color="#3b82f6" />
             <Text style={{ fontSize: 22, fontWeight: "bold", color: colors.text, marginTop: 4 }}>{daysThisMonth()}</Text>
             <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: "center" }}>Días este mes</Text>
           </View>
-
           <View style={[styles.statCard, { backgroundColor: colors.background }]}>
             <MaterialCommunityIcons name="trophy" size={22} color="#f59e0b" />
             <Text style={{ fontSize: 22, fontWeight: "bold", color: colors.text, marginTop: 4 }}>{longestStreak()}</Text>
             <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: "center" }}>Racha más larga</Text>
           </View>
-
           <View style={[styles.statCard, { backgroundColor: colors.background }]}>
             <MaterialCommunityIcons name="dumbbell" size={22} color="#22c55e" />
             <Text style={{ fontSize: 22, fontWeight: "bold", color: colors.text, marginTop: 4 }}>{totalWorkouts()}</Text>
             <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: "center" }}>Total entrenos</Text>
           </View>
-
           <View style={[styles.statCard, { backgroundColor: colors.background }]}>
             <MaterialCommunityIcons name="star" size={22} color="#a855f7" />
             <Text style={{ fontSize: 13, fontWeight: "bold", color: colors.text, marginTop: 4, textAlign: "center" }} numberOfLines={2}>{mostFrequentRoutine()}</Text>
             <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: "center" }}>Rutina favorita</Text>
           </View>
-
         </View>
       </View>
 
-      {/* Navegación mes */}
+      {/* Calendario */}
       <View style={[styles.card, { backgroundColor: colors.card }]}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <TouchableOpacity onPress={prevMonth}>
             <MaterialCommunityIcons name="chevron-left" size={26} color={colors.text} />
           </TouchableOpacity>
-          <Text style={{ fontSize: 18, fontWeight: "bold", color: colors.text }}>
-            {monthNames[month]} {year}
-          </Text>
+          <Text style={{ fontSize: 18, fontWeight: "bold", color: colors.text }}>{monthNames[month]} {year}</Text>
           <TouchableOpacity onPress={nextMonth}>
             <MaterialCommunityIcons name="chevron-right" size={26} color={colors.text} />
           </TouchableOpacity>
         </View>
 
-        {/* Cabecera días */}
         <View style={{ flexDirection: "row", marginBottom: 6 }}>
           {dayNames.map(d => (
             <Text key={d} style={{ flex: 1, textAlign: "center", fontWeight: "bold", color: colors.textSecondary, fontSize: 13 }}>{d}</Text>
           ))}
         </View>
 
-        {/* Celdas */}
         <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
           {cells.map((day, i) => {
             if (!day) return <View key={`empty-${i}`} style={{ width: "14.28%", aspectRatio: 1 }} />;
             const log = getLogForDay(day);
             const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
             const isToday = dateStr === todayStr;
+            const isPartial = log && !log.completed;
 
             return (
               <TouchableOpacity
@@ -189,10 +181,15 @@ export function CalendarView() {
               >
                 <View style={[
                   styles.dayCell,
-                  log ? { backgroundColor: "#22c55e" } : {},
+                  log && log.completed ? { backgroundColor: "#22c55e" } : {},
+                  isPartial ? { backgroundColor: "#f59e0b" } : {},
                   isToday && !log ? { borderWidth: 2, borderColor: colors.button } : {},
                 ]}>
-                  <Text style={{ color: log ? "white" : isToday ? colors.button : colors.text, fontWeight: isToday ? "bold" : "normal", fontSize: 13 }}>
+                  <Text style={{
+                    color: log ? "white" : isToday ? colors.button : colors.text,
+                    fontWeight: isToday ? "bold" : "normal",
+                    fontSize: 13
+                  }}>
                     {day}
                   </Text>
                 </View>
@@ -201,10 +198,15 @@ export function CalendarView() {
           })}
         </View>
 
-        {/* Leyenda */}
-        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12 }}>
-          <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: "#22c55e", marginRight: 6 }} />
-          <Text style={{ color: colors.textSecondary, fontSize: 13 }}>Día entrenado</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, gap: 16 }}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: "#22c55e", marginRight: 6 }} />
+            <Text style={{ color: colors.textSecondary, fontSize: 13 }}>Completada</Text>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: "#f59e0b", marginRight: 6 }} />
+            <Text style={{ color: colors.textSecondary, fontSize: 13 }}>Parcial</Text>
+          </View>
         </View>
       </View>
 
@@ -215,35 +217,64 @@ export function CalendarView() {
           <Text style={{ color: colors.textSecondary }}>Aún no has completado ninguna rutina</Text>
         ) : (
           [...logs].reverse().map((log, i) => (
-            <View key={i} style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-              <MaterialCommunityIcons name="check-circle" size={18} color="#22c55e" style={{ marginRight: 8 }} />
-              <View>
+            <TouchableOpacity key={i} style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }} onPress={() => { setSelectedDay(log); setModalVisible(true); }}>
+              <MaterialCommunityIcons
+                name={log.completed ? "check-circle" : "check-circle-outline"}
+                size={18}
+                color={log.completed ? "#22c55e" : "#f59e0b"}
+                style={{ marginRight: 8 }}
+              />
+              <View style={{ flex: 1 }}>
                 <Text style={{ color: colors.text, fontWeight: "bold" }}>{log.routineName}</Text>
                 <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-                  {log.date.split("-").reverse().join("/")}
+                  {log.date.split("-").reverse().join("/")} — {log.completedCount}/{log.totalCount} ejercicios
                 </Text>
               </View>
-            </View>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
           ))
         )}
       </View>
 
-      {/* Modal día */}
+      {/* Modal detalle día */}
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <View style={[styles.modalBg, { backgroundColor: colors.modalBg }]}>
           <View style={[styles.modal, { backgroundColor: colors.card }]}>
-            <TouchableOpacity onPress={() => setModalVisible(false)} style={{ marginBottom: 10 }}>
+            <TouchableOpacity onPress={() => setModalVisible(false)} style={{ marginBottom: 12 }}>
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
+
             {selectedDay && (
               <>
-                <Text style={{ fontSize: 18, fontWeight: "bold", color: colors.text, marginBottom: 6 }}>
-                  {selectedDay.date.split("-").reverse().join("/")}
+                <Text style={{ fontSize: 18, fontWeight: "bold", color: colors.text, marginBottom: 4 }}>
+                  {selectedDay.routineName}
                 </Text>
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <MaterialCommunityIcons name="check-circle" size={20} color="#22c55e" style={{ marginRight: 8 }} />
-                  <Text style={{ color: colors.text, fontSize: 16 }}>{selectedDay.routineName}</Text>
-                </View>
+                <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 16 }}>
+                  {selectedDay.date.split("-").reverse().join("/")} — {selectedDay.completedCount}/{selectedDay.totalCount} ejercicios
+                </Text>
+
+      {selectedDay.exercises && selectedDay.exercises.length > 0 ? selectedDay.exercises.map((ex, i) => (
+  <View key={i} style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
+    <MaterialCommunityIcons
+      name={ex.completed ? "check-circle" : "checkbox-blank-circle-outline"}
+      size={18}
+      color={ex.completed ? "#22c55e" : colors.textSecondary}
+      style={{ marginRight: 10 }}
+    />
+    <View>
+      <Text style={{ color: ex.completed ? colors.text : colors.textSecondary, fontWeight: ex.completed ? "bold" : "normal" }}>
+        {ex.name}
+      </Text>
+      <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+        {ex.sets} series × {ex.reps} reps
+      </Text>
+    </View>
+  </View>
+)) : (
+  <Text style={{ color: colors.textSecondary }}>
+    Sin detalle de ejercicios disponible para este entreno.
+  </Text>
+)}
               </>
             )}
           </View>
