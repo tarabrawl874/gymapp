@@ -201,9 +201,7 @@ export function RoutineManager() {
   };
 
   const saveEditExercise = () => {
-    if (editingExerciseIndex === null) return;
-    if (!editExName || !editExSets || !editExReps) return;
-
+    if (editingExerciseIndex === null || !editExName || !editExSets || !editExReps) return;
     const updatedExercises = [...newExercises];
     updatedExercises[editingExerciseIndex] = {
       ...updatedExercises[editingExerciseIndex],
@@ -275,7 +273,6 @@ export function RoutineManager() {
                 </View>
               </View>
 
-              {/* Vista normal sin lápiz en ejercicios */}
               <View style={{ marginTop: 8 }}>
                 {routine.exercises.map((ex, i) => (
                   <TouchableOpacity key={i} style={styles.exerciseRow} onPress={() => toggleExerciseCompleted(routine.id, i)}>
@@ -295,7 +292,6 @@ export function RoutineManager() {
         })}
       </ScrollView>
 
-      {/* Modal crear/editar rutina */}
       <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={closeModal}>
         <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
           <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
@@ -307,16 +303,31 @@ export function RoutineManager() {
             <TextInput placeholder="Descripción" style={[inputStyle, { height: 60 }]} value={newRoutineDesc} onChangeText={setNewRoutineDesc} multiline placeholderTextColor={colors.placeholder} />
             <Text style={{ fontWeight: "bold", marginTop: 10, color: colors.text }}>Añadir ejercicios:</Text>
             <TextInput placeholder="Nombre del ejercicio" style={inputStyle} value={exerciseName} onChangeText={setExerciseName} placeholderTextColor={colors.placeholder} />
-            <View style={{ flexDirection: "row" }}>
-              <TextInput placeholder="Series" style={[inputStyle, { flex: 1, marginRight: 5 }]} keyboardType="number-pad" value={exerciseSets} onChangeText={setExerciseSets} placeholderTextColor={colors.placeholder} />
-              <TextInput placeholder="Reps" style={[inputStyle, { flex: 1, marginLeft: 5 }]} keyboardType="number-pad" value={exerciseReps} onChangeText={setExerciseReps} placeholderTextColor={colors.placeholder} />
+
+            <View style={{ flexDirection: "row", width: "100%" }}>
+              <TextInput
+                placeholder="Series"
+                style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
+                keyboardType="number-pad"
+                value={exerciseSets}
+                onChangeText={setExerciseSets}
+                placeholderTextColor={colors.placeholder}
+              />
+              <TextInput
+                placeholder="Reps"
+                style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
+                keyboardType="number-pad"
+                value={exerciseReps}
+                onChangeText={setExerciseReps}
+                placeholderTextColor={colors.placeholder}
+              />
             </View>
+
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 10 }]} onPress={handleAddExercise}>
               <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
               <Text style={styles.buttonText}>Añadir ejercicio</Text>
             </TouchableOpacity>
 
-            {/* Lista de ejercicios con lápiz solo dentro del modal */}
             {newExercises.length > 0 && (
               <View style={{ marginTop: 10 }}>
                 {newExercises.map((ex, i) => (
@@ -340,7 +351,6 @@ export function RoutineManager() {
         </View>
       </Modal>
 
-      {/* Modal editar ejercicio */}
       <Modal visible={editExerciseModal} transparent animationType="fade" onRequestClose={() => setEditExerciseModal(false)}>
         <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
           <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
@@ -355,10 +365,10 @@ export function RoutineManager() {
               onChangeText={setEditExName}
               placeholderTextColor={colors.placeholder}
             />
-            <View style={{ flexDirection: "row" }}>
+            <View style={{ flexDirection: "row", width: "100%" }}>
               <TextInput
                 placeholder="Series"
-                style={[inputStyle, { flex: 1, marginRight: 5 }]}
+                style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
                 keyboardType="number-pad"
                 value={editExSets}
                 onChangeText={setEditExSets}
@@ -366,7 +376,7 @@ export function RoutineManager() {
               />
               <TextInput
                 placeholder="Reps"
-                style={[inputStyle, { flex: 1, marginLeft: 5 }]}
+                style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
                 keyboardType="number-pad"
                 value={editExReps}
                 onChangeText={setEditExReps}
