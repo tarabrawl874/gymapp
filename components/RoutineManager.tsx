@@ -179,17 +179,53 @@ export function RoutineManager() {
     saveRoutines(updatedRoutines);
 
     const routine = updatedRoutines.find(r => r.id === routineId);
-    if (routine && routine.exercises.every(e => e.completed)) {
-      const today = new Date();
-      const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    if (!routine) return;
+
+    const completedExercises = routine.exercises.filter(e => e.completed);
+    const completedCount = completedExercises.length;
+    const totalCount = routine.exercises.length;
+
+    if (completedCount === 0) {
+      // Si se desmarcó el último ejercicio, borrar el registro del calendario
       const existing = await AsyncStorage.getItem(WORKOUT_LOG_KEY);
       const logs = existing ? JSON.parse(existing) : [];
-      const alreadyLogged = logs.find((l: any) => l.date === dateStr && l.routineName === routine.name);
-      if (!alreadyLogged) {
-        logs.push({ date: dateStr, routineName: routine.name });
-        await AsyncStorage.setItem(WORKOUT_LOG_KEY, JSON.stringify(logs));
-      }
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const filtered = logs.filter((l: any) => !(l.date === dateStr && l.routineId === routineId));
+      await AsyncStorage.setItem(WORKOUT_LOG_KEY, JSON.stringify(filtered));
+      return;
     }
+
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const existing = await AsyncStorage.getItem(WORKOUT_LOG_KEY);
+    const logs = existing ? JSON.parse(existing) : [];
+
+    const existingIndex = logs.findIndex((l: any) => l.date === dateStr && l.routineId === routineId);
+
+    const logEntry = {
+      date: dateStr,
+      routineId: routineId,
+      routineName: routine.name,
+      completedCount,
+      totalCount,
+      completed: completedCount === totalCount,
+      // Guardamos los ejercicios con su estado
+      exercises: routine.exercises.map(e => ({
+        name: e.name,
+        sets: e.sets,
+        reps: e.reps,
+        completed: e.completed,
+      })),
+    };
+
+    if (existingIndex >= 0) {
+      logs[existingIndex] = logEntry;
+    } else {
+      logs.push(logEntry);
+    }
+
+    await AsyncStorage.setItem(WORKOUT_LOG_KEY, JSON.stringify(logs));
   };
 
   const openEditExercise = (index: number, exercise: Exercise) => {
@@ -242,7 +278,11 @@ export function RoutineManager() {
 
       <ScrollView style={{ marginTop: 4 }}>
         {routines.map((routine, index) => {
-          const allCompleted = routine.exercises.length > 0 && routine.exercises.every(e => e.completed);
+          const completedCount = routine.exercises.filter(e => e.completed).length;
+          const totalCount = routine.exercises.length;
+          const allCompleted = completedCount === totalCount && totalCount > 0;
+          const someCompleted = completedCount > 0 && !allCompleted;
+
           return (
             <View key={routine.id} style={[styles.card, { backgroundColor: colors.card }]}>
               <View style={styles.cardHeader}>
@@ -250,9 +290,15 @@ export function RoutineManager() {
                   {allCompleted && (
                     <MaterialCommunityIcons name="check-circle" size={20} color="#22c55e" style={{ marginRight: 6 }} />
                   )}
+                  {someCompleted && (
+                    <MaterialCommunityIcons name="check-circle-outline" size={20} color="#f59e0b" style={{ marginRight: 6 }} />
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.routineTitle, { color: colors.text }]}>{routine.name}</Text>
                     <Text style={{ color: colors.textSecondary }}>{routine.description}</Text>
+                    {someCompleted && (
+                      <Text style={{ color: "#f59e0b", fontSize: 12 }}>{completedCount}/{totalCount} ejercicios</Text>
+                    )}
                   </View>
                 </View>
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -303,7 +349,6 @@ export function RoutineManager() {
             <TextInput placeholder="Descripción" style={[inputStyle, { height: 60 }]} value={newRoutineDesc} onChangeText={setNewRoutineDesc} multiline placeholderTextColor={colors.placeholder} />
             <Text style={{ fontWeight: "bold", marginTop: 10, color: colors.text }}>Añadir ejercicios:</Text>
             <TextInput placeholder="Nombre del ejercicio" style={inputStyle} value={exerciseName} onChangeText={setExerciseName} placeholderTextColor={colors.placeholder} />
-
             <View style={{ flexDirection: "row", width: "100%" }}>
               <TextInput
                 placeholder="Series"
@@ -322,12 +367,10 @@ export function RoutineManager() {
                 placeholderTextColor={colors.placeholder}
               />
             </View>
-
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 10 }]} onPress={handleAddExercise}>
               <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
               <Text style={styles.buttonText}>Añadir ejercicio</Text>
             </TouchableOpacity>
-
             {newExercises.length > 0 && (
               <View style={{ marginTop: 10 }}>
                 {newExercises.map((ex, i) => (
@@ -343,7 +386,6 @@ export function RoutineManager() {
                 ))}
               </View>
             )}
-
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 20 }]} onPress={handleSaveRoutine}>
               <Text style={styles.buttonText}>{editingRoutineId ? "Guardar cambios" : "Crear rutina"}</Text>
             </TouchableOpacity>
@@ -358,13 +400,7 @@ export function RoutineManager() {
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Editar ejercicio</Text>
-            <TextInput
-              placeholder="Nombre del ejercicio"
-              style={inputStyle}
-              value={editExName}
-              onChangeText={setEditExName}
-              placeholderTextColor={colors.placeholder}
-            />
+            <TextInput placeholder="Nombre del ejercicio" style={inputStyle} value={editExName} onChangeText={setEditExName} placeholderTextColor={colors.placeholder} />
             <View style={{ flexDirection: "row", width: "100%" }}>
               <TextInput
                 placeholder="Series"
@@ -389,7 +425,6 @@ export function RoutineManager() {
           </View>
         </View>
       </Modal>
-
     </View>
   );
 }
