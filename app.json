@@ -1,9 +1,9 @@
 {
   "expo": {
     "name": "E2GYM",
-    "slug": "gym-app",
-    "version": "1.0.5",
-    "note":"correccion de fallos y logo actualizado",
+    "slug": "e2-gym",
+    "version": "1.0.6",
+    "note":"nueva funcion para editar las rutinas ya creadas, y funcion nueva en el calendario con rutinas parciales y completas, nuevo logo",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -27,7 +27,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "7b9dd5a0-f057-4c09-9a7f-da5ed392dd1d"
+        "projectId": "e4725e3e-0ac8-400b-98a3-c88612bb3134"
       }
     }
   }
