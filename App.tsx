@@ -9,9 +9,55 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 const { width } = Dimensions.get("window");
 const TAB_WIDTH = width / 3;
 
+function SplashScreen({ onFinish }: { onFinish: () => void }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const exitAnim = useRef(new Animated.Value(1)).current;
+  const loadingAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }),
+    ]).start(() => {
+      Animated.timing(loadingAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: false,
+      }).start(() => {
+        setTimeout(() => {
+          Animated.timing(exitAnim, { toValue: 0, duration: 600, useNativeDriver: true }).start(() => {
+            onFinish();
+          });
+        }, 300);
+      });
+    });
+  }, []);
+
+  const barWidth = loadingAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0%", "100%"],
+  });
+
+  return (
+    <Animated.View style={[styles.splash, { opacity: exitAnim }]}>
+      <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }], alignItems: "center", width: "100%" }}>
+        <Text style={styles.splashLogo}>E2</Text>
+        <Text style={styles.splashTitle}>GYM</Text>
+
+        {/* Barra de carga */}
+        <View style={styles.loadingContainer}>
+          <Animated.View style={[styles.loadingBar, { width: barWidth }]} />
+        </View>
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
 function AppContent() {
   const [activeTab, setActiveTab] = useState("routines");
   const [settingsModal, setSettingsModal] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
   const { isDark, toggleTheme, colors } = useTheme();
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const indicatorAnim = useRef(new Animated.Value(0)).current;
@@ -51,6 +97,10 @@ function AppContent() {
     }
   };
 
+  if (showSplash) {
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
 
@@ -88,8 +138,6 @@ function AppContent() {
             );
           })}
         </View>
-
-        {/* Indicador deslizante */}
         <Animated.View
           style={[
             styles.indicator,
@@ -101,7 +149,7 @@ function AppContent() {
         />
       </View>
 
-      {/* Contenido con fade */}
+      {/* Contenido */}
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
         {renderContent()}
       </Animated.View>
@@ -142,8 +190,46 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create(
+  {loadingContainer: {
+  width: 160,
+  height: 3,
+  backgroundColor: "rgba(255,255,255,0.2)",
+  borderRadius: 2,
+  marginTop: 40,
+  overflow: "hidden",
+},
+loadingBar: {
+  height: 3,
+  backgroundColor: "white",
+  borderRadius: 2,
+},
   container: { flex: 1 },
+  splash: {
+    flex: 1,
+    backgroundColor: "#1f2937",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  splashLogo: {
+    color: "white",
+    fontSize: 72,
+    fontWeight: "bold",
+    letterSpacing: 4,
+  },
+  splashTitle: {
+    color: "white",
+    fontSize: 36,
+    fontWeight: "bold",
+    letterSpacing: 8,
+    marginTop: 4,
+  },
+  splashSub: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 14,
+    marginTop: 12,
+    letterSpacing: 2,
+  },
   header: { padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   logo: { color: "white", fontSize: 28, fontWeight: "bold" },
   title: { color: "white", fontSize: 20, fontWeight: "bold", marginTop: 2 },
