@@ -3,6 +3,7 @@
     "name": "E2GYM",
     "slug": "e2-gym",
     "version": "1.0.7",
+    "note":"pantalla de carga, y bug slider",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
