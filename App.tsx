@@ -44,8 +44,6 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
       <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }], alignItems: "center", width: "100%" }}>
         <Text style={styles.splashLogo}>E2</Text>
         <Text style={styles.splashTitle}>GYM</Text>
-
-        {/* Barra de carga */}
         <View style={styles.loadingContainer}>
           <Animated.View style={[styles.loadingBar, { width: barWidth }]} />
         </View>
@@ -71,7 +69,6 @@ function AppContent() {
   const changeTab = (tab: string) => {
     if (tab === activeTab) return;
     const newIndex = tabs.findIndex(t => t.key === tab);
-
     Animated.parallel([
       Animated.sequence([
         Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
@@ -84,7 +81,6 @@ function AppContent() {
         friction: 10,
       }),
     ]).start();
-
     setTimeout(() => setActiveTab(tab), 120);
   };
 
@@ -104,7 +100,6 @@ function AppContent() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
 
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.header }]}>
         <View>
           <Text style={styles.logo}>E2</Text>
@@ -116,45 +111,26 @@ function AppContent() {
         </TouchableOpacity>
       </View>
 
-      {/* Tabs con indicador deslizante */}
       <View style={[styles.tabsContainer, { backgroundColor: colors.card, borderBottomColor: colors.border, borderBottomWidth: 0.5 }]}>
         <View style={styles.tabs}>
           {tabs.map((tab) => {
             const isActive = activeTab === tab.key;
             return (
-              <TouchableOpacity
-                key={tab.key}
-                onPress={() => changeTab(tab.key)}
-                style={styles.tabItem}
-              >
-                <Text style={{
-                  fontSize: 14,
-                  color: isActive ? colors.button : colors.textSecondary,
-                  fontWeight: isActive ? "bold" : "normal",
-                }}>
+              <TouchableOpacity key={tab.key} onPress={() => changeTab(tab.key)} style={styles.tabItem}>
+                <Text style={{ fontSize: 14, color: isActive ? colors.button : colors.textSecondary, fontWeight: isActive ? "bold" : "normal" }}>
                   {tab.label}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </View>
-        <Animated.View
-          style={[
-            styles.indicator,
-            {
-              backgroundColor: colors.button,
-              transform: [{ translateX: indicatorAnim }],
-            },
-          ]}
-        />
+        <Animated.View style={[styles.indicator, { backgroundColor: colors.button, transform: [{ translateX: indicatorAnim }] }]} />
       </View>
 
-      {/* Contenido */}
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
         {renderContent()}
       </Animated.View>
 
-      {/* Modal Ajustes */}
       <Modal visible={settingsModal} transparent animationType="fade" onRequestClose={() => setSettingsModal(false)}>
         <View style={[styles.modalBg, { backgroundColor: colors.modalBg }]}>
           <View style={[styles.modal, { backgroundColor: colors.card }]}>
@@ -164,12 +140,7 @@ function AppContent() {
             <Text style={{ fontSize: 20, fontWeight: "bold", color: colors.text, marginBottom: 24 }}>Ajustes</Text>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <MaterialCommunityIcons
-                  name={isDark ? "weather-night" : "weather-sunny"}
-                  size={22}
-                  color={colors.text}
-                  style={{ marginRight: 10 }}
-                />
+                <MaterialCommunityIcons name={isDark ? "weather-night" : "weather-sunny"} size={22} color={colors.text} style={{ marginRight: 10 }} />
                 <Text style={{ fontSize: 16, color: colors.text }}>{isDark ? "Modo oscuro" : "Modo claro"}</Text>
               </View>
               <Switch value={isDark} onValueChange={toggleTheme} trackColor={{ false: "#ccc", true: "#3b82f6" }} thumbColor="#fff" />
@@ -190,20 +161,7 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create(
-  {loadingContainer: {
-  width: 160,
-  height: 3,
-  backgroundColor: "rgba(255,255,255,0.2)",
-  borderRadius: 2,
-  marginTop: 40,
-  overflow: "hidden",
-},
-loadingBar: {
-  height: 3,
-  backgroundColor: "white",
-  borderRadius: 2,
-},
+const styles = StyleSheet.create({
   container: { flex: 1 },
   splash: {
     flex: 1,
@@ -224,11 +182,18 @@ loadingBar: {
     letterSpacing: 8,
     marginTop: 4,
   },
-  splashSub: {
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 14,
-    marginTop: 12,
-    letterSpacing: 2,
+  loadingContainer: {
+    width: 160,
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 2,
+    marginTop: 40,
+    overflow: "hidden",
+  },
+  loadingBar: {
+    height: 3,
+    backgroundColor: "white",
+    borderRadius: 2,
   },
   header: { padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   logo: { color: "white", fontSize: 28, fontWeight: "bold" },
