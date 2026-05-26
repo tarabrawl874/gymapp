@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet, Modal, BackHandler } from "react-native";
+import { View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet, Modal, BackHandler, Dimensions } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "./ThemeContext";
+import Svg, { Polyline, Circle, Line, Text as SvgText } from "react-native-svg";
 
 interface WeightEntry {
   id: string;
@@ -42,6 +43,53 @@ const calc1RM = (weight: number, reps: number): number => {
   if (reps === 1) return weight;
   return Math.round(weight * (1 + reps / 30));
 };
+
+function WeightChart({ entries, colors }: { entries: WeightEntry[], colors: any }) {
+  const sorted = [...entries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  if (sorted.length < 2) return (
+    <View style={{ alignItems: "center", padding: 20 }}>
+      <Text style={{ color: colors.textSecondary }}>Necesitas al menos 2 registros para ver la gráfica</Text>
+    </View>
+  );
+
+  const width = Dimensions.get("window").width - 80;
+  const height = 180;
+  const paddingX = 40;
+  const paddingY = 20;
+
+  const weights = sorted.map(e => e.weight);
+  const minW = Math.min(...weights);
+  const maxW = Math.max(...weights);
+  const range = maxW - minW || 1;
+
+  const points = sorted.map((e, i) => {
+    const x = paddingX + (i / (sorted.length - 1)) * (width - paddingX * 2);
+    const y = paddingY + ((maxW - e.weight) / range) * (height - paddingY * 2);
+    return { x, y, entry: e };
+  });
+
+  const polylinePoints = points.map(p => `${p.x},${p.y}`).join(" ");
+
+  return (
+    <Svg width={width} height={height}>
+      <Line x1={paddingX} y1={paddingY} x2={paddingX} y2={height - paddingY} stroke={colors.border} strokeWidth="1" />
+      <Line x1={paddingX} y1={height - paddingY} x2={width - paddingX} y2={height - paddingY} stroke={colors.border} strokeWidth="1" />
+      <SvgText x={paddingX - 4} y={paddingY + 4} fontSize="10" fill={colors.textSecondary} textAnchor="end">{maxW}kg</SvgText>
+      <SvgText x={paddingX - 4} y={height - paddingY + 4} fontSize="10" fill={colors.textSecondary} textAnchor="end">{minW}kg</SvgText>
+      <Polyline points={polylinePoints} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {points.map((p, i) => (
+        <React.Fragment key={i}>
+          <Circle cx={p.x} cy={p.y} r={4} fill="#3b82f6" />
+          {i === 0 || i === points.length - 1 ? (
+            <SvgText x={p.x} y={height - paddingY + 14} fontSize="9" fill={colors.textSecondary} textAnchor="middle">
+              {toSpanish(p.entry.date)}
+            </SvgText>
+          ) : null}
+        </React.Fragment>
+      ))}
+    </Svg>
+  );
+}
 
 export function WeightLogger() {
   const { colors } = useTheme();
@@ -190,10 +238,27 @@ export function WeightLogger() {
       <View style={[styles.card, { backgroundColor: colors.card }]}>
         <Text style={[styles.title, { color: colors.text }]}>Registrar peso</Text>
         <TextInput style={inputStyle} placeholder="Ejercicio" placeholderTextColor={colors.placeholder} value={exercise} onChangeText={setExercise} />
+
+        {/* FIX desbordamiento */}
         <View style={{ flexDirection: "row", width: "100%" }}>
-          <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]} placeholder="Peso (kg)" placeholderTextColor={colors.placeholder} keyboardType="numeric" value={weight} onChangeText={setWeight} />
-          <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]} placeholder="Reps" placeholderTextColor={colors.placeholder} keyboardType="number-pad" value={reps} onChangeText={setReps} />
+          <TextInput
+            style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
+            placeholder="Peso (kg)"
+            placeholderTextColor={colors.placeholder}
+            keyboardType="numeric"
+            value={weight}
+            onChangeText={setWeight}
+          />
+          <TextInput
+            style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
+            placeholder="Reps"
+            placeholderTextColor={colors.placeholder}
+            keyboardType="number-pad"
+            value={reps}
+            onChangeText={setReps}
+          />
         </View>
+
         <TextInput style={inputStyle} value={date} onChangeText={t => setDate(formatDateInput(t))} placeholder="DD/MM/AA" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={8} />
         <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={addEntry}>
           <Text style={{ color: "white" }}>Añadir</Text>
@@ -214,7 +279,9 @@ export function WeightLogger() {
                 <Text style={{ fontWeight: "bold", fontSize: 16, color: colors.text }}>{ex}</Text>
                 <Text style={{ color: "green", fontSize: 12 }}>+{getProgress(list)}%</Text>
                 {best1RM && (
-                  <Text style={{ color: "#3b82f6", fontSize: 12, marginTop: 2 }}>1RM est: {best1RM} kg</Text>
+                  <Text style={{ color: "#3b82f6", fontSize: 12, marginTop: 2 }}>
+                    1RM est: {best1RM} kg
+                  </Text>
                 )}
               </View>
               <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -241,8 +308,12 @@ export function WeightLogger() {
             {visible.map(e => (
               <View key={e.id} style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
                 <View>
-                  <Text style={{ color: colors.text }}>{e.weight} kg {e.reps ? `× ${e.reps} reps` : ""}</Text>
-                  <Text style={{ fontSize: 11, color: "#3b82f6" }}>1RM est: {calc1RM(e.weight, e.reps || 1)} kg</Text>
+                  <Text style={{ color: colors.text }}>
+                    {e.weight} kg {e.reps ? `× ${e.reps} reps` : ""}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: "#3b82f6" }}>
+                    1RM est: {calc1RM(e.weight, e.reps || 1)} kg
+                  </Text>
                   <Text style={{ fontSize: 12, color: colors.textSecondary }}>{toSpanish(e.date)}</Text>
                 </View>
                 <View style={{ flexDirection: "row" }}>
@@ -259,7 +330,7 @@ export function WeightLogger() {
         );
       })}
 
-      {/* Modal gráfica - sin SVG */}
+      {/* Modal gráfica */}
       <Modal visible={chartModal} transparent animationType="fade" onRequestClose={() => setChartModal(false)}>
         <View style={[styles.modalBg, { backgroundColor: colors.modalBg }]}>
           <View style={[styles.modal, { backgroundColor: colors.card }]}>
@@ -267,7 +338,7 @@ export function WeightLogger() {
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={{ fontSize: 18, fontWeight: "bold", color: colors.text, marginBottom: 16 }}>{chartExercise}</Text>
-            <Text style={{ color: colors.textSecondary }}>Gráfica próximamente</Text>
+            <WeightChart entries={grouped.get(chartExercise) || []} colors={colors} />
           </View>
         </View>
       </Modal>
@@ -280,8 +351,22 @@ export function WeightLogger() {
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
             <View style={{ flexDirection: "row", width: "100%" }}>
-              <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]} value={editWeight} onChangeText={setEditWeight} keyboardType="numeric" placeholder="Peso (kg)" placeholderTextColor={colors.placeholder} />
-              <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]} value={editReps} onChangeText={setEditReps} keyboardType="number-pad" placeholder="Reps" placeholderTextColor={colors.placeholder} />
+              <TextInput
+                style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
+                value={editWeight}
+                onChangeText={setEditWeight}
+                keyboardType="numeric"
+                placeholder="Peso (kg)"
+                placeholderTextColor={colors.placeholder}
+              />
+              <TextInput
+                style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
+                value={editReps}
+                onChangeText={setEditReps}
+                keyboardType="number-pad"
+                placeholder="Reps"
+                placeholderTextColor={colors.placeholder}
+              />
             </View>
             <TextInput style={inputStyle} value={editDate} onChangeText={t => setEditDate(formatDateInput(t))} placeholder="DD/MM/AA" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={8} />
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={saveEdit}>
@@ -299,8 +384,22 @@ export function WeightLogger() {
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
             <View style={{ flexDirection: "row", width: "100%" }}>
-              <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]} placeholder="Nuevo peso (kg)" placeholderTextColor={colors.placeholder} value={newWeight} onChangeText={setNewWeight} keyboardType="numeric" />
-              <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]} placeholder="Reps" placeholderTextColor={colors.placeholder} value={newReps} onChangeText={setNewReps} keyboardType="number-pad" />
+              <TextInput
+                style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
+                placeholder="Nuevo peso (kg)"
+                placeholderTextColor={colors.placeholder}
+                value={newWeight}
+                onChangeText={setNewWeight}
+                keyboardType="numeric"
+              />
+              <TextInput
+                style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
+                placeholder="Reps"
+                placeholderTextColor={colors.placeholder}
+                value={newReps}
+                onChangeText={setNewReps}
+                keyboardType="number-pad"
+              />
             </View>
             <TextInput style={inputStyle} value={newDate} onChangeText={t => setNewDate(formatDateInput(t))} placeholder="DD/MM/AA" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={8} />
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={saveUpdate}>
