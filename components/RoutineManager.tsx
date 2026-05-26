@@ -186,6 +186,7 @@ export function RoutineManager() {
     const totalCount = routine.exercises.length;
 
     if (completedCount === 0) {
+      // Si se desmarcó el último ejercicio, borrar el registro del calendario
       const existing = await AsyncStorage.getItem(WORKOUT_LOG_KEY);
       const logs = existing ? JSON.parse(existing) : [];
       const today = new Date();
@@ -199,15 +200,17 @@ export function RoutineManager() {
     const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const existing = await AsyncStorage.getItem(WORKOUT_LOG_KEY);
     const logs = existing ? JSON.parse(existing) : [];
+
     const existingIndex = logs.findIndex((l: any) => l.date === dateStr && l.routineId === routineId);
 
     const logEntry = {
       date: dateStr,
-      routineId,
+      routineId: routineId,
       routineName: routine.name,
       completedCount,
       totalCount,
       completed: completedCount === totalCount,
+      // Guardamos los ejercicios con su estado
       exercises: routine.exercises.map(e => ({
         name: e.name,
         sets: e.sets,
@@ -335,72 +338,61 @@ export function RoutineManager() {
         })}
       </ScrollView>
 
-      {/* Modal crear/editar rutina CON ScrollView */}
       <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={closeModal}>
         <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
           <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
-
             <TouchableOpacity onPress={closeModal} style={{ marginBottom: 10 }}>
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>{editingRoutineId ? "Editar rutina" : "Nueva rutina"}</Text>
-              <TextInput placeholder="Nombre de la rutina" style={inputStyle} value={newRoutineName} onChangeText={setNewRoutineName} placeholderTextColor={colors.placeholder} />
-              <TextInput placeholder="Descripción" style={[inputStyle, { height: 60 }]} value={newRoutineDesc} onChangeText={setNewRoutineDesc} multiline placeholderTextColor={colors.placeholder} />
-
-              <Text style={{ fontWeight: "bold", marginTop: 10, marginBottom: 8, color: colors.text }}>Añadir ejercicios:</Text>
-              <TextInput placeholder="Nombre del ejercicio" style={inputStyle} value={exerciseName} onChangeText={setExerciseName} placeholderTextColor={colors.placeholder} />
-              <View style={{ flexDirection: "row", width: "100%" }}>
-                <TextInput
-                  placeholder="Series"
-                  style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
-                  keyboardType="number-pad"
-                  value={exerciseSets}
-                  onChangeText={setExerciseSets}
-                  placeholderTextColor={colors.placeholder}
-                />
-                <TextInput
-                  placeholder="Reps"
-                  style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
-                  keyboardType="number-pad"
-                  value={exerciseReps}
-                  onChangeText={setExerciseReps}
-                  placeholderTextColor={colors.placeholder}
-                />
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{editingRoutineId ? "Editar rutina" : "Nueva rutina"}</Text>
+            <TextInput placeholder="Nombre de la rutina" style={inputStyle} value={newRoutineName} onChangeText={setNewRoutineName} placeholderTextColor={colors.placeholder} />
+            <TextInput placeholder="Descripción" style={[inputStyle, { height: 60 }]} value={newRoutineDesc} onChangeText={setNewRoutineDesc} multiline placeholderTextColor={colors.placeholder} />
+            <Text style={{ fontWeight: "bold", marginTop: 10, color: colors.text }}>Añadir ejercicios:</Text>
+            <TextInput placeholder="Nombre del ejercicio" style={inputStyle} value={exerciseName} onChangeText={setExerciseName} placeholderTextColor={colors.placeholder} />
+            <View style={{ flexDirection: "row", width: "100%" }}>
+              <TextInput
+                placeholder="Series"
+                style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
+                keyboardType="number-pad"
+                value={exerciseSets}
+                onChangeText={setExerciseSets}
+                placeholderTextColor={colors.placeholder}
+              />
+              <TextInput
+                placeholder="Reps"
+                style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
+                keyboardType="number-pad"
+                value={exerciseReps}
+                onChangeText={setExerciseReps}
+                placeholderTextColor={colors.placeholder}
+              />
+            </View>
+            <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 10 }]} onPress={handleAddExercise}>
+              <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
+              <Text style={styles.buttonText}>Añadir ejercicio</Text>
+            </TouchableOpacity>
+            {newExercises.length > 0 && (
+              <View style={{ marginTop: 10 }}>
+                {newExercises.map((ex, i) => (
+                  <View key={i} style={[styles.exerciseRow, { borderBottomColor: colors.border, borderBottomWidth: 0.5 }]}>
+                    <Text style={{ color: colors.text, flex: 1 }}>{ex.name} ({ex.sets}×{ex.reps})</Text>
+                    <TouchableOpacity onPress={() => openEditExercise(i, ex)} style={{ marginRight: 10 }}>
+                      <MaterialCommunityIcons name="pencil-outline" size={18} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setNewExercises(newExercises.filter((_, idx) => idx !== i))}>
+                      <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
               </View>
-
-              <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 4, marginBottom: 16 }]} onPress={handleAddExercise}>
-                <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
-                <Text style={styles.buttonText}>Añadir ejercicio</Text>
-              </TouchableOpacity>
-
-              {newExercises.length > 0 && (
-                <View style={{ marginBottom: 10 }}>
-                  <Text style={{ fontWeight: "bold", color: colors.text, marginBottom: 8 }}>Ejercicios añadidos:</Text>
-                  {newExercises.map((ex, i) => (
-                    <View key={i} style={[styles.exerciseRow, { borderBottomColor: colors.border, borderBottomWidth: 0.5, paddingVertical: 6 }]}>
-                      <Text style={{ color: colors.text, flex: 1 }}>{ex.name} ({ex.sets}×{ex.reps})</Text>
-                      <TouchableOpacity onPress={() => openEditExercise(i, ex)} style={{ marginRight: 10 }}>
-                        <MaterialCommunityIcons name="pencil-outline" size={18} color={colors.textSecondary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => setNewExercises(newExercises.filter((_, idx) => idx !== i))}>
-                        <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 10, marginBottom: 20 }]} onPress={handleSaveRoutine}>
-                <Text style={styles.buttonText}>{editingRoutineId ? "Guardar cambios" : "Crear rutina"}</Text>
-              </TouchableOpacity>
-            </ScrollView>
+            )}
+            <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 20 }]} onPress={handleSaveRoutine}>
+              <Text style={styles.buttonText}>{editingRoutineId ? "Guardar cambios" : "Crear rutina"}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Modal editar ejercicio */}
       <Modal visible={editExerciseModal} transparent animationType="fade" onRequestClose={() => setEditExerciseModal(false)}>
         <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
           <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
@@ -408,13 +400,7 @@ export function RoutineManager() {
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Editar ejercicio</Text>
-            <TextInput
-              placeholder="Nombre del ejercicio"
-              style={inputStyle}
-              value={editExName}
-              onChangeText={setEditExName}
-              placeholderTextColor={colors.placeholder}
-            />
+            <TextInput placeholder="Nombre del ejercicio" style={inputStyle} value={editExName} onChangeText={setEditExName} placeholderTextColor={colors.placeholder} />
             <View style={{ flexDirection: "row", width: "100%" }}>
               <TextInput
                 placeholder="Series"
@@ -439,7 +425,6 @@ export function RoutineManager() {
           </View>
         </View>
       </Modal>
-
     </View>
   );
 }
@@ -448,7 +433,7 @@ const styles = StyleSheet.create({
   button: { flexDirection: "row", padding: 10, borderRadius: 6, alignItems: "center", justifyContent: "center" },
   buttonText: { color: "white", fontWeight: "bold" },
   modalBackground: { flex: 1, justifyContent: "center", padding: 16 },
-  modalContainer: { backgroundColor: "white", borderRadius: 8, padding: 16, maxHeight: "90%" },
+  modalContainer: { borderRadius: 8, padding: 16, maxHeight: "85%" },
   modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
   card: { borderRadius: 8, padding: 12, marginBottom: 10, marginHorizontal: 10, elevation: 2 },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
