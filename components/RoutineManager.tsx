@@ -344,7 +344,7 @@ export function RoutineManager() {
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
 
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>{editingRoutineId ? "Editar rutina" : "Nueva rutina"}</Text>
               <TextInput placeholder="Nombre de la rutina" style={inputStyle} value={newRoutineName} onChangeText={setNewRoutineName} placeholderTextColor={colors.placeholder} />
               <TextInput placeholder="Descripción" style={[inputStyle, { height: 60 }]} value={newRoutineDesc} onChangeText={setNewRoutineDesc} multiline placeholderTextColor={colors.placeholder} />
