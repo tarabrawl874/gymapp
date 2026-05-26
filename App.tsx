@@ -93,7 +93,7 @@ function AppContent() {
     }
   };
 
-  if (showSplash) {
+  if (false) {
     return <SplashScreen onFinish={() => setShowSplash(false)} />;
   }
 
