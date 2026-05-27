@@ -3,10 +3,12 @@
     "name": "E2GYM",
     "slug": "e2-gym",
     "version": "1.0.7",
-    "note":"Pantalla de carga y bug rutinas slider",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
