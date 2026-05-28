@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, BackHandler } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Modal, BackHandler, Animated } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "./ThemeContext";
@@ -33,12 +33,36 @@ export function RoutineManager() {
   const [exerciseName, setExerciseName] = useState("");
   const [exerciseSets, setExerciseSets] = useState("");
   const [exerciseReps, setExerciseReps] = useState("");
-
   const [editExerciseModal, setEditExerciseModal] = useState(false);
   const [editingExerciseIndex, setEditingExerciseIndex] = useState<number | null>(null);
   const [editExName, setEditExName] = useState("");
   const [editExSets, setEditExSets] = useState("");
   const [editExReps, setEditExReps] = useState("");
+
+  // Toast de rutina completada
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const toastAnim = useRef(new Animated.Value(100)).current;
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setToastVisible(true);
+    toastAnim.setValue(100);
+    toastOpacity.setValue(0);
+
+    Animated.parallel([
+      Animated.spring(toastAnim, { toValue: 0, tension: 60, friction: 10, useNativeDriver: true }),
+      Animated.timing(toastOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+    ]).start(() => {
+      setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(toastAnim, { toValue: 100, duration: 400, useNativeDriver: true }),
+          Animated.timing(toastOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ]).start(() => setToastVisible(false));
+      }, 2000);
+    });
+  };
 
   useEffect(() => {
     const loadRoutines = async () => {
@@ -46,18 +70,12 @@ export function RoutineManager() {
         const storedRoutines = await AsyncStorage.getItem(STORAGE_KEY);
         const lastReset = await AsyncStorage.getItem(LAST_RESET_KEY);
         const today = new Date().toISOString().split("T")[0];
-
         let parsed: Routine[] = storedRoutines ? JSON.parse(storedRoutines) : [];
-
         if (lastReset !== today && parsed.length > 0) {
-          parsed = parsed.map(r => ({
-            ...r,
-            exercises: r.exercises.map(e => ({ ...e, completed: false })),
-          }));
+          parsed = parsed.map(r => ({ ...r, exercises: r.exercises.map(e => ({ ...e, completed: false })) }));
           await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
           await AsyncStorage.setItem(LAST_RESET_KEY, today);
         }
-
         if (parsed.length > 0) {
           setRoutines(parsed);
         } else {
@@ -181,9 +199,13 @@ export function RoutineManager() {
     const routine = updatedRoutines.find(r => r.id === routineId);
     if (!routine) return;
 
-    const completedExercises = routine.exercises.filter(e => e.completed);
-    const completedCount = completedExercises.length;
+    const completedCount = routine.exercises.filter(e => e.completed).length;
     const totalCount = routine.exercises.length;
+
+    // Mostrar toast cuando se completa la rutina entera
+    if (completedCount === totalCount) {
+      showToast(`¡${routine.name} completada! 💪`);
+    }
 
     if (completedCount === 0) {
       const existing = await AsyncStorage.getItem(WORKOUT_LOG_KEY);
@@ -268,6 +290,21 @@ export function RoutineManager() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+
+      {/* Toast notificación */}
+      {toastVisible && (
+        <Animated.View style={[
+          styles.toast,
+          {
+            transform: [{ translateY: toastAnim }],
+            opacity: toastOpacity,
+          }
+        ]}>
+          <MaterialCommunityIcons name="check-circle" size={20} color="white" style={{ marginRight: 8 }} />
+          <Text style={{ color: "white", fontWeight: "bold", fontSize: 15 }}>{toastMessage}</Text>
+        </Animated.View>
+      )}
+
       <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, margin: 10 }]} onPress={() => setModalVisible(true)}>
         <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
         <Text style={styles.buttonText}>Crear rutina</Text>
@@ -335,46 +372,26 @@ export function RoutineManager() {
         })}
       </ScrollView>
 
-      {/* Modal crear/editar rutina CON ScrollView */}
       <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={closeModal}>
         <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
           <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
-
             <TouchableOpacity onPress={closeModal} style={{ marginBottom: 10 }}>
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
-
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <Text style={[styles.modalTitle, { color: colors.text }]}>{editingRoutineId ? "Editar rutina" : "Nueva rutina"}</Text>
               <TextInput placeholder="Nombre de la rutina" style={inputStyle} value={newRoutineName} onChangeText={setNewRoutineName} placeholderTextColor={colors.placeholder} />
               <TextInput placeholder="Descripción" style={[inputStyle, { height: 60 }]} value={newRoutineDesc} onChangeText={setNewRoutineDesc} multiline placeholderTextColor={colors.placeholder} />
-
               <Text style={{ fontWeight: "bold", marginTop: 10, marginBottom: 8, color: colors.text }}>Añadir ejercicios:</Text>
               <TextInput placeholder="Nombre del ejercicio" style={inputStyle} value={exerciseName} onChangeText={setExerciseName} placeholderTextColor={colors.placeholder} />
               <View style={{ flexDirection: "row", width: "100%" }}>
-                <TextInput
-                  placeholder="Series"
-                  style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
-                  keyboardType="number-pad"
-                  value={exerciseSets}
-                  onChangeText={setExerciseSets}
-                  placeholderTextColor={colors.placeholder}
-                />
-                <TextInput
-                  placeholder="Reps"
-                  style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
-                  keyboardType="number-pad"
-                  value={exerciseReps}
-                  onChangeText={setExerciseReps}
-                  placeholderTextColor={colors.placeholder}
-                />
+                <TextInput placeholder="Series" style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]} keyboardType="number-pad" value={exerciseSets} onChangeText={setExerciseSets} placeholderTextColor={colors.placeholder} />
+                <TextInput placeholder="Reps" style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]} keyboardType="number-pad" value={exerciseReps} onChangeText={setExerciseReps} placeholderTextColor={colors.placeholder} />
               </View>
-
               <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 4, marginBottom: 16 }]} onPress={handleAddExercise}>
                 <MaterialCommunityIcons name="plus" size={16} color="white" style={{ marginRight: 6 }} />
                 <Text style={styles.buttonText}>Añadir ejercicio</Text>
               </TouchableOpacity>
-
               {newExercises.length > 0 && (
                 <View style={{ marginBottom: 10 }}>
                   <Text style={{ fontWeight: "bold", color: colors.text, marginBottom: 8 }}>Ejercicios añadidos:</Text>
@@ -391,7 +408,6 @@ export function RoutineManager() {
                   ))}
                 </View>
               )}
-
               <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 10, marginBottom: 20 }]} onPress={handleSaveRoutine}>
                 <Text style={styles.buttonText}>{editingRoutineId ? "Guardar cambios" : "Crear rutina"}</Text>
               </TouchableOpacity>
@@ -400,7 +416,6 @@ export function RoutineManager() {
         </View>
       </Modal>
 
-      {/* Modal editar ejercicio */}
       <Modal visible={editExerciseModal} transparent animationType="fade" onRequestClose={() => setEditExerciseModal(false)}>
         <View style={[styles.modalBackground, { backgroundColor: colors.modalBg }]}>
           <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
@@ -408,30 +423,10 @@ export function RoutineManager() {
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Editar ejercicio</Text>
-            <TextInput
-              placeholder="Nombre del ejercicio"
-              style={inputStyle}
-              value={editExName}
-              onChangeText={setEditExName}
-              placeholderTextColor={colors.placeholder}
-            />
+            <TextInput placeholder="Nombre del ejercicio" style={inputStyle} value={editExName} onChangeText={setEditExName} placeholderTextColor={colors.placeholder} />
             <View style={{ flexDirection: "row", width: "100%" }}>
-              <TextInput
-                placeholder="Series"
-                style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
-                keyboardType="number-pad"
-                value={editExSets}
-                onChangeText={setEditExSets}
-                placeholderTextColor={colors.placeholder}
-              />
-              <TextInput
-                placeholder="Reps"
-                style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
-                keyboardType="number-pad"
-                value={editExReps}
-                onChangeText={setEditExReps}
-                placeholderTextColor={colors.placeholder}
-              />
+              <TextInput placeholder="Series" style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]} keyboardType="number-pad" value={editExSets} onChangeText={setEditExSets} placeholderTextColor={colors.placeholder} />
+              <TextInput placeholder="Reps" style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]} keyboardType="number-pad" value={editExReps} onChangeText={setEditExReps} placeholderTextColor={colors.placeholder} />
             </View>
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, marginTop: 10 }]} onPress={saveEditExercise}>
               <Text style={styles.buttonText}>Guardar cambios</Text>
@@ -448,10 +443,23 @@ const styles = StyleSheet.create({
   button: { flexDirection: "row", padding: 10, borderRadius: 6, alignItems: "center", justifyContent: "center" },
   buttonText: { color: "white", fontWeight: "bold" },
   modalBackground: { flex: 1, justifyContent: "center", padding: 16 },
-  modalContainer: { backgroundColor: "white", borderRadius: 8, padding: 16, maxHeight: "90%" },
+  modalContainer: { borderRadius: 8, padding: 16, maxHeight: "90%" },
   modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
   card: { borderRadius: 8, padding: 12, marginBottom: 10, marginHorizontal: 10, elevation: 2 },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   routineTitle: { fontWeight: "bold", fontSize: 16 },
   exerciseRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginVertical: 3 },
+  toast: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: "#22c55e",
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    zIndex: 999,
+    elevation: 10,
+  },
 });
