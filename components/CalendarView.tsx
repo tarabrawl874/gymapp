@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, BackHandler } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, BackHandler, Animated } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "./ThemeContext";
@@ -22,6 +22,43 @@ interface WorkoutLog {
 }
 
 export const WORKOUT_LOG_KEY = "@workout_log";
+
+function AnimatedFire({ streak }: { streak: number }) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (streak === 0) return;
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(scaleAnim, { toValue: 1.2, duration: 600, useNativeDriver: true }),
+          Animated.timing(rotateAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ]),
+        Animated.parallel([
+          Animated.timing(scaleAnim, { toValue: 0.9, duration: 600, useNativeDriver: true }),
+          Animated.timing(rotateAnim, { toValue: -1, duration: 600, useNativeDriver: true }),
+        ]),
+        Animated.parallel([
+          Animated.timing(scaleAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.timing(rotateAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ]),
+      ])
+    ).start();
+  }, [streak]);
+
+  const rotate = rotateAnim.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ["-8deg", "0deg", "8deg"],
+  });
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }, { rotate }] }}>
+      <MaterialCommunityIcons name="fire" size={28} color="#f97316" />
+    </Animated.View>
+  );
+}
 
 export function CalendarView() {
   const { colors } = useTheme();
@@ -104,6 +141,8 @@ export function CalendarView() {
 
   const totalWorkouts = () => new Set(logs.map(l => l.date)).size;
 
+  const streak = currentStreak();
+
   const cells = [];
   for (let i = 0; i < adjustedFirstDay; i++) cells.push(null);
   for (let i = 1; i <= daysInMonth; i++) cells.push(i);
@@ -113,10 +152,10 @@ export function CalendarView() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.background, padding: 10 }}>
 
-      {/* Racha actual */}
+      {/* Racha con fuego animado */}
       <View style={[styles.card, { backgroundColor: colors.card, flexDirection: "row", alignItems: "center", justifyContent: "center" }]}>
-        <MaterialCommunityIcons name="fire" size={28} color="#f97316" style={{ marginRight: 8 }} />
-        <Text style={{ fontSize: 22, fontWeight: "bold", color: colors.text }}>{currentStreak()}</Text>
+        <AnimatedFire streak={streak} />
+        <Text style={{ fontSize: 22, fontWeight: "bold", color: colors.text, marginLeft: 8 }}>{streak}</Text>
         <Text style={{ fontSize: 16, color: colors.textSecondary, marginLeft: 6 }}>días seguidos entrenando</Text>
       </View>
 
@@ -185,11 +224,7 @@ export function CalendarView() {
                   isPartial ? { backgroundColor: "#f59e0b" } : {},
                   isToday && !log ? { borderWidth: 2, borderColor: colors.button } : {},
                 ]}>
-                  <Text style={{
-                    color: log ? "white" : isToday ? colors.button : colors.text,
-                    fontWeight: isToday ? "bold" : "normal",
-                    fontSize: 13
-                  }}>
+                  <Text style={{ color: log ? "white" : isToday ? colors.button : colors.text, fontWeight: isToday ? "bold" : "normal", fontSize: 13 }}>
                     {day}
                   </Text>
                 </View>
@@ -243,7 +278,6 @@ export function CalendarView() {
             <TouchableOpacity onPress={() => setModalVisible(false)} style={{ marginBottom: 12 }}>
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
-
             {selectedDay && (
               <>
                 <Text style={{ fontSize: 18, fontWeight: "bold", color: colors.text, marginBottom: 4 }}>
@@ -252,29 +286,28 @@ export function CalendarView() {
                 <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 16 }}>
                   {selectedDay.date.split("-").reverse().join("/")} — {selectedDay.completedCount}/{selectedDay.totalCount} ejercicios
                 </Text>
-
-      {selectedDay.exercises && selectedDay.exercises.length > 0 ? selectedDay.exercises.map((ex, i) => (
-  <View key={i} style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
-    <MaterialCommunityIcons
-      name={ex.completed ? "check-circle" : "checkbox-blank-circle-outline"}
-      size={18}
-      color={ex.completed ? "#22c55e" : colors.textSecondary}
-      style={{ marginRight: 10 }}
-    />
-    <View>
-      <Text style={{ color: ex.completed ? colors.text : colors.textSecondary, fontWeight: ex.completed ? "bold" : "normal" }}>
-        {ex.name}
-      </Text>
-      <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-        {ex.sets} series × {ex.reps} reps
-      </Text>
-    </View>
-  </View>
-)) : (
-  <Text style={{ color: colors.textSecondary }}>
-    Sin detalle de ejercicios disponible para este entreno.
-  </Text>
-)}
+                {selectedDay.exercises && selectedDay.exercises.length > 0 ? (
+                  selectedDay.exercises.map((ex, i) => (
+                    <View key={i} style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
+                      <MaterialCommunityIcons
+                        name={ex.completed ? "check-circle" : "checkbox-blank-circle-outline"}
+                        size={18}
+                        color={ex.completed ? "#22c55e" : colors.textSecondary}
+                        style={{ marginRight: 10 }}
+                      />
+                      <View>
+                        <Text style={{ color: ex.completed ? colors.text : colors.textSecondary, fontWeight: ex.completed ? "bold" : "normal" }}>
+                          {ex.name}
+                        </Text>
+                        <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                          {ex.sets} series × {ex.reps} reps
+                        </Text>
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={{ color: colors.textSecondary }}>Sin detalle disponible. Marca ejercicios para ver el detalle aquí.</Text>
+                )}
               </>
             )}
           </View>
