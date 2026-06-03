@@ -8,6 +8,7 @@ import Svg, { Polyline, Circle, Line, Text as SvgText } from "react-native-svg";
 interface WeightEntry {
   id: string;
   exercise: string;
+  category: string;
   weight: number;
   reps: number;
   date: string;
@@ -15,6 +16,7 @@ interface WeightEntry {
 
 const STORAGE_KEY = "@weight_entries";
 const ORDER_KEY = "@weight_order";
+const CATEGORIES_KEY = "@weight_categories";
 
 const toSpanish = (iso: string) => {
   const d = new Date(iso);
@@ -94,14 +96,26 @@ function WeightChart({ entries, colors }: { entries: WeightEntry[], colors: any 
 export function WeightLogger() {
   const { colors } = useTheme();
   const [entries, setEntries] = useState<WeightEntry[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [exerciseOrder, setExerciseOrder] = useState<string[]>([]);
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({});
+
   const [exercise, setExercise] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
   const [weight, setWeight] = useState("");
   const [reps, setReps] = useState("");
   const [date, setDate] = useState(todaySpanish());
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const [categoryModal, setCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [assignExerciseModal, setAssignExerciseModal] = useState(false);
+  const [selectedExerciseToAssign, setSelectedExerciseToAssign] = useState("");
+  const [categorySelectorModal, setCategorySelectorModal] = useState(false);
+
   const [chartModal, setChartModal] = useState(false);
-  const [chartExercise, setChartExercise] = useState<string>("");
+  const [chartExercise, setChartExercise] = useState("");
+
   const [editModal, setEditModal] = useState(false);
   const [updateModal, setUpdateModal] = useState(false);
   const [selected, setSelected] = useState<WeightEntry | null>(null);
@@ -116,27 +130,26 @@ export function WeightLogger() {
     const load = async () => {
       const data = await AsyncStorage.getItem(STORAGE_KEY);
       const order = await AsyncStorage.getItem(ORDER_KEY);
+      const cats = await AsyncStorage.getItem(CATEGORIES_KEY);
       if (data) setEntries(JSON.parse(data));
       if (order) setExerciseOrder(JSON.parse(order));
+      if (cats) setCategories(JSON.parse(cats));
     };
     load();
   }, []);
 
   useEffect(() => {
     const backAction = () => {
+      if (categoryModal) { setCategoryModal(false); return true; }
+      if (categorySelectorModal) { setCategorySelectorModal(false); return true; }
       if (chartModal) { setChartModal(false); return true; }
       if (editModal) { setEditModal(false); return true; }
+      if (updateModal) { setUpdateModal(false); return true; }
       return false;
     };
     const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
     return () => backHandler.remove();
-  }, [chartModal, editModal]);
-
-  useEffect(() => {
-    const backAction = () => { if (updateModal) { setUpdateModal(false); return true; } return false; };
-    const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
-    return () => backHandler.remove();
-  }, [updateModal]);
+  }, [categoryModal, categorySelectorModal, chartModal, editModal, updateModal]);
 
   const save = async (data: WeightEntry[]) => {
     setEntries(data);
@@ -148,17 +161,55 @@ export function WeightLogger() {
     await AsyncStorage.setItem(ORDER_KEY, JSON.stringify(order));
   };
 
+  const saveCategories = async (cats: string[]) => {
+    setCategories(cats);
+    await AsyncStorage.setItem(CATEGORIES_KEY, JSON.stringify(cats));
+  };
+
+  const addCategory = () => {
+    if (!newCategoryName.trim()) return;
+    if (categories.includes(newCategoryName.trim())) return;
+    saveCategories([...categories, newCategoryName.trim()]);
+    setNewCategoryName("");
+  };
+
+  const deleteCategory = (cat: string) => {
+    saveCategories(categories.filter(c => c !== cat));
+  };
+  const assignExerciseToCategory = async (
+  exerciseName: string,
+  categoryName: string
+) => {
+  const updatedEntries = entries.map(entry =>
+    entry.exercise === exerciseName
+      ? { ...entry, category: categoryName }
+      : entry
+  );
+
+  await save(updatedEntries);
+  setAssignExerciseModal(false);
+};
+
   const addEntry = () => {
     if (!exercise || !weight || !date) return;
     const isoDate = toISO(date);
     if (!isoDate) return;
-    save([{ id: Date.now().toString(), exercise, weight: parseFloat(weight), reps: parseInt(reps) || 1, date: isoDate }, ...entries]);
+    const newEntry: WeightEntry = {
+      id: Date.now().toString(),
+      exercise,
+      category: selectedCategory,
+      weight: parseFloat(weight),
+      reps: parseInt(reps) || 1,
+      date: isoDate,
+    };
+    save([newEntry, ...entries]);
     if (!exerciseOrder.includes(exercise)) saveOrder([exercise, ...exerciseOrder]);
     setExercise(""); setWeight(""); setReps(""); setDate(todaySpanish());
   };
 
   const openUpdate = (exerciseName: string) => {
-    setSelected({ id: "", exercise: exerciseName, weight: 0, reps: 1, date: "" });
+    const ex = entries.find(e => e.exercise === exerciseName);
+    setSelected({ id: "", exercise: exerciseName, category: ex?.category || "", weight: 0, reps: 1, date: "" });
     setNewWeight(""); setNewReps(""); setNewDate(todaySpanish()); setUpdateModal(true);
   };
 
@@ -166,7 +217,7 @@ export function WeightLogger() {
     if (!selected || !newWeight) return;
     const isoDate = toISO(newDate);
     if (!isoDate) return;
-    save([{ id: Date.now().toString(), exercise: selected.exercise, weight: parseFloat(newWeight), reps: parseInt(newReps) || 1, date: isoDate }, ...entries]);
+    save([{ id: Date.now().toString(), exercise: selected.exercise, category: selected.category, weight: parseFloat(newWeight), reps: parseInt(newReps) || 1, date: isoDate }, ...entries]);
     setUpdateModal(false);
   };
 
@@ -205,22 +256,24 @@ export function WeightLogger() {
     return map;
   }, [entries]);
 
-  const orderedExercises = useMemo(() => {
-    const all = Array.from(grouped.keys());
-    const ordered = exerciseOrder.filter(ex => all.includes(ex));
-    const newOnes = all.filter(ex => !exerciseOrder.includes(ex));
-    return [...newOnes, ...ordered];
-  }, [grouped, exerciseOrder]);
+  const groupedByCategory = useMemo(() => {
+    const map = new Map<string, string[]>();
+    map.set("Sin categoría", []);
+    categories.forEach(cat => map.set(cat, []));
 
-  const moveExercise = (index: number, direction: "up" | "down") => {
-    const newOrder = [...orderedExercises];
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= newOrder.length) return;
-    [newOrder[index], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[index]];
-    saveOrder(newOrder);
-  };
+    Array.from(grouped.keys()).forEach(ex => {
+      const entry = entries.find(e => e.exercise === ex);
+      const cat = entry?.category || "Sin categoría";
+      if (!map.has(cat)) map.set("Sin categoría", []);
+      const list = map.get(cat) || [];
+      map.set(cat, [...list, ex]);
+    });
 
-  const toggle = (ex: string) => setExpanded(prev => ({ ...prev, [ex]: !prev[ex] }));
+    return map;
+  }, [grouped, entries, categories]);
+
+  const toggleCategory = (cat: string) => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
+  const toggleExercise = (ex: string) => setExpandedExercises(prev => ({ ...prev, [ex]: !prev[ex] }));
 
   const inputStyle = {
     borderWidth: 1,
@@ -233,102 +286,195 @@ export function WeightLogger() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, padding: 10, backgroundColor: colors.background }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
 
-      <View style={[styles.card, { backgroundColor: colors.card }]}>
+      {/* FORM */}
+      <View style={[styles.card, { backgroundColor: colors.card, margin: 10 }]}>
         <Text style={[styles.title, { color: colors.text }]}>Registrar peso</Text>
         <TextInput style={inputStyle} placeholder="Ejercicio" placeholderTextColor={colors.placeholder} value={exercise} onChangeText={setExercise} />
 
-        {/* FIX desbordamiento */}
-        <View style={{ flexDirection: "row", width: "100%" }}>
-          <TextInput
-            style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
-            placeholder="Peso (kg)"
-            placeholderTextColor={colors.placeholder}
-            keyboardType="numeric"
-            value={weight}
-            onChangeText={setWeight}
-          />
-          <TextInput
-            style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
-            placeholder="Reps"
-            placeholderTextColor={colors.placeholder}
-            keyboardType="number-pad"
-            value={reps}
-            onChangeText={setReps}
-          />
-        </View>
+        <TouchableOpacity
+          style={[inputStyle, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}
+          onPress={() => setCategorySelectorModal(true)}
+        >
+          <Text style={{ color: selectedCategory ? colors.text : colors.placeholder }}>
+            {selectedCategory || "Categoría (opcional)"}
+          </Text>
+          <MaterialCommunityIcons name="chevron-down" size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
 
+        <View style={{ flexDirection: "row", width: "100%" }}>
+          <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]} placeholder="Peso (kg)" placeholderTextColor={colors.placeholder} keyboardType="numeric" value={weight} onChangeText={setWeight} />
+          <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]} placeholder="Reps" placeholderTextColor={colors.placeholder} keyboardType="number-pad" value={reps} onChangeText={setReps} />
+        </View>
         <TextInput style={inputStyle} value={date} onChangeText={t => setDate(formatDateInput(t))} placeholder="DD/MM/AA" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={8} />
         <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={addEntry}>
           <Text style={{ color: "white" }}>Añadir</Text>
         </TouchableOpacity>
       </View>
 
-      {orderedExercises.map((ex, index) => {
-        const list = grouped.get(ex) || [];
-        const sorted = [...list].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        const open = expanded[ex];
-        const visible = open ? sorted : sorted.slice(0, 2);
-        const best1RM = getBest1RM(list);
+      {/* Botón gestionar categorías */}
+      <TouchableOpacity
+        style={[styles.button, { backgroundColor: colors.button, marginHorizontal: 10, marginBottom: 10, flexDirection: "row" }]}
+        onPress={() => setCategoryModal(true)}
+      >
+        <MaterialCommunityIcons name="tag-plus" size={16} color="white" style={{ marginRight: 6 }} />
+        <Text style={{ color: "white", fontWeight: "bold" }}>Gestionar categorías</Text>
+      </TouchableOpacity>
+
+      {/* LISTA POR CATEGORÍAS */}
+      {Array.from(groupedByCategory.entries()).map(([cat, exercises]) => {
+        if (exercises.length === 0) return null;
+        const isOpen = expandedCategories[cat];
 
         return (
-          <View key={ex} style={[styles.card, { backgroundColor: colors.card }]}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <View>
-                <Text style={{ fontWeight: "bold", fontSize: 16, color: colors.text }}>{ex}</Text>
-                <Text style={{ color: "green", fontSize: 12 }}>+{getProgress(list)}%</Text>
-                {best1RM && (
-                  <Text style={{ color: "#3b82f6", fontSize: 12, marginTop: 2 }}>
-                    1RM est: {best1RM} kg
-                  </Text>
-                )}
-              </View>
+          <View key={cat} style={{ marginHorizontal: 10, marginBottom: 10 }}>
+            <TouchableOpacity
+              style={[styles.categoryHeader, { backgroundColor: colors.header }]}
+              onPress={() => toggleCategory(cat)}
+            >
               <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={{ marginRight: 6 }}>
-                  <TouchableOpacity onPress={() => moveExercise(index, "up")} disabled={index === 0}>
-                    <MaterialCommunityIcons name="chevron-up" size={18} color={index === 0 ? colors.border : colors.textSecondary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => moveExercise(index, "down")} disabled={index === orderedExercises.length - 1}>
-                    <MaterialCommunityIcons name="chevron-down" size={18} color={index === orderedExercises.length - 1 ? colors.border : colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity onPress={() => { setChartExercise(ex); setChartModal(true); }} style={{ marginRight: 6 }}>
-                  <MaterialCommunityIcons name="chart-line" size={22} color={colors.text} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => openUpdate(ex)}>
-                  <MaterialCommunityIcons name="plus-circle-outline" size={22} color={colors.text} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => toggle(ex)} style={{ marginLeft: 10 }}>
-                  <MaterialCommunityIcons name={open ? "chevron-up" : "chevron-down"} size={22} color={colors.text} />
-                </TouchableOpacity>
+                <MaterialCommunityIcons name="tag" size={16} color="white" style={{ marginRight: 8 }} />
+                <Text style={{ color: "white", fontWeight: "bold", fontSize: 15 }}>{cat}</Text>
+                <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginLeft: 8 }}>{exercises.length} ejercicios</Text>
               </View>
-            </View>
+              <MaterialCommunityIcons name={isOpen ? "chevron-up" : "chevron-down"} size={20} color="white" />
+            </TouchableOpacity>
 
-            {visible.map(e => (
-              <View key={e.id} style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
-                <View>
-                  <Text style={{ color: colors.text }}>
-                    {e.weight} kg {e.reps ? `× ${e.reps} reps` : ""}
-                  </Text>
-                  <Text style={{ fontSize: 11, color: "#3b82f6" }}>
-                    1RM est: {calc1RM(e.weight, e.reps || 1)} kg
-                  </Text>
-                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>{toSpanish(e.date)}</Text>
+            {isOpen && exercises.map((ex, index) => {
+              const list = grouped.get(ex) || [];
+              const sorted = [...list].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+              const open = expandedExercises[ex];
+              const visible = open ? sorted : sorted.slice(0, 2);
+              const best1RM = getBest1RM(list);
+
+              return (
+                <View key={ex} style={[styles.card, { backgroundColor: colors.card, marginTop: 2, borderRadius: index === exercises.length - 1 ? 8 : 0 }]}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: "bold", fontSize: 15, color: colors.text }}>{ex}</Text>
+                      <Text style={{ color: "green", fontSize: 12 }}>+{getProgress(list)}%</Text>
+                      {best1RM && <Text style={{ color: "#3b82f6", fontSize: 12 }}>1RM est: {best1RM} kg</Text>}
+                    </View>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+
+                    <TouchableOpacity
+                        onPress={() => {
+                         setSelectedExerciseToAssign(ex);
+                        setAssignExerciseModal(true);
+                         }}
+                       style={{ marginRight: 6 }}
+                      >
+                        <MaterialCommunityIcons
+                         name="tag-edit-outline"
+                        size={20}
+                        color={colors.text}
+                      />
+                      </TouchableOpacity>
+           
+                      <TouchableOpacity onPress={() => { setChartExercise(ex); setChartModal(true); }} style={{ marginRight: 6 }}>
+                        <MaterialCommunityIcons name="chart-line" size={20} color={colors.text} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => openUpdate(ex)} style={{ marginRight: 6 }}>
+                        <MaterialCommunityIcons name="plus-circle-outline" size={20} color={colors.text} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => toggleExercise(ex)}>
+                        <MaterialCommunityIcons name={open ? "chevron-up" : "chevron-down"} size={20} color={colors.text} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {visible.map(e => (
+                    <View key={e.id} style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
+                      <View>
+                        <Text style={{ color: colors.text }}>{e.weight} kg {e.reps ? `× ${e.reps} reps` : ""}</Text>
+                        <Text style={{ fontSize: 11, color: "#3b82f6" }}>1RM est: {calc1RM(e.weight, e.reps || 1)} kg</Text>
+                        <Text style={{ fontSize: 12, color: colors.textSecondary }}>{toSpanish(e.date)}</Text>
+                      </View>
+                      <View style={{ flexDirection: "row" }}>
+                        <TouchableOpacity onPress={() => openEdit(e)} style={{ marginRight: 10 }}>
+                          <MaterialCommunityIcons name="pencil-outline" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => deleteEntry(e.id)}>
+                          <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
                 </View>
-                <View style={{ flexDirection: "row" }}>
-                  <TouchableOpacity onPress={() => openEdit(e)} style={{ marginRight: 10 }}>
-                    <MaterialCommunityIcons name="pencil-outline" size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => deleteEntry(e.id)}>
-                    <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         );
       })}
+
+      {/* Modal selector categoría */}
+      <Modal visible={categorySelectorModal} transparent animationType="fade" onRequestClose={() => setCategorySelectorModal(false)}>
+        <View style={[styles.modalBg, { backgroundColor: colors.modalBg }]}>
+          <View style={[styles.modal, { backgroundColor: colors.card }]}>
+            <TouchableOpacity onPress={() => setCategorySelectorModal(false)} style={{ marginBottom: 12 }}>
+              <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={{ fontSize: 18, fontWeight: "bold", color: colors.text, marginBottom: 16 }}>Seleccionar categoría</Text>
+            <TouchableOpacity
+              style={[styles.categoryOption, { backgroundColor: selectedCategory === "" ? colors.button : colors.background }]}
+              onPress={() => { setSelectedCategory(""); setCategorySelectorModal(false); }}
+            >
+              <Text style={{ color: selectedCategory === "" ? "white" : colors.text }}>Sin categoría</Text>
+            </TouchableOpacity>
+            {categories.map(cat => (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.categoryOption, { backgroundColor: selectedCategory === cat ? colors.button : colors.background }]}
+                onPress={() => { setSelectedCategory(cat); setCategorySelectorModal(false); }}
+              >
+                <Text style={{ color: selectedCategory === cat ? "white" : colors.text }}>{cat}</Text>
+              </TouchableOpacity>
+            ))}
+            {categories.length === 0 && (
+              <Text style={{ color: colors.textSecondary, textAlign: "center" }}>No tienes categorías. Créalas desde "Gestionar categorías".</Text>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal gestionar categorías */}
+      <Modal visible={categoryModal} transparent animationType="fade" onRequestClose={() => setCategoryModal(false)}>
+        <View style={[styles.modalBg, { backgroundColor: colors.modalBg }]}>
+          <View style={[styles.modal, { backgroundColor: colors.card }]}>
+            <TouchableOpacity onPress={() => setCategoryModal(false)} style={{ marginBottom: 12 }}>
+              <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={{ fontSize: 18, fontWeight: "bold", color: colors.text, marginBottom: 16 }}>Categorías</Text>
+            <View style={{ flexDirection: "row", marginBottom: 16 }}>
+              <TextInput
+                style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 8, marginBottom: 0 }]}
+                placeholder="Nueva categoría"
+                placeholderTextColor={colors.placeholder}
+                value={newCategoryName}
+                onChangeText={setNewCategoryName}
+              />
+              <TouchableOpacity style={[styles.button, { backgroundColor: colors.button, paddingHorizontal: 16 }]} onPress={addCategory}>
+                <Text style={{ color: "white", fontWeight: "bold" }}>Añadir</Text>
+              </TouchableOpacity>
+            </View>
+            {categories.map(cat => (
+              <View key={cat} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: 10,          backgroundColor: colors.background, borderRadius: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <MaterialCommunityIcons name="tag" size={16} color={colors.button} style={{ marginRight: 8 }} />
+                  <Text style={{ color: colors.text }}>{cat}</Text>
+                </View>
+                <TouchableOpacity onPress={() => deleteCategory(cat)}>
+                  <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            ))}
+            {categories.length === 0 && (
+              <Text style={{ color: colors.textSecondary, textAlign: "center" }}>No tienes categorías creadas</Text>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal gráfica */}
       <Modal visible={chartModal} transparent animationType="fade" onRequestClose={() => setChartModal(false)}>
@@ -351,22 +497,8 @@ export function WeightLogger() {
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
             <View style={{ flexDirection: "row", width: "100%" }}>
-              <TextInput
-                style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
-                value={editWeight}
-                onChangeText={setEditWeight}
-                keyboardType="numeric"
-                placeholder="Peso (kg)"
-                placeholderTextColor={colors.placeholder}
-              />
-              <TextInput
-                style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
-                value={editReps}
-                onChangeText={setEditReps}
-                keyboardType="number-pad"
-                placeholder="Reps"
-                placeholderTextColor={colors.placeholder}
-              />
+              <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]} value={editWeight} onChangeText={setEditWeight} keyboardType="numeric" placeholder="Peso (kg)" placeholderTextColor={colors.placeholder} />
+              <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]} value={editReps} onChangeText={setEditReps} keyboardType="number-pad" placeholder="Reps" placeholderTextColor={colors.placeholder} />
             </View>
             <TextInput style={inputStyle} value={editDate} onChangeText={t => setEditDate(formatDateInput(t))} placeholder="DD/MM/AA" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={8} />
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={saveEdit}>
@@ -384,22 +516,8 @@ export function WeightLogger() {
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
             <View style={{ flexDirection: "row", width: "100%" }}>
-              <TextInput
-                style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]}
-                placeholder="Nuevo peso (kg)"
-                placeholderTextColor={colors.placeholder}
-                value={newWeight}
-                onChangeText={setNewWeight}
-                keyboardType="numeric"
-              />
-              <TextInput
-                style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]}
-                placeholder="Reps"
-                placeholderTextColor={colors.placeholder}
-                value={newReps}
-                onChangeText={setNewReps}
-                keyboardType="number-pad"
-              />
+              <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]} placeholder="Nuevo peso (kg)" placeholderTextColor={colors.placeholder} value={newWeight} onChangeText={setNewWeight} keyboardType="numeric" />
+              <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]} placeholder="Reps" placeholderTextColor={colors.placeholder} value={newReps} onChangeText={setNewReps} keyboardType="number-pad" />
             </View>
             <TextInput style={inputStyle} value={newDate} onChangeText={t => setNewDate(formatDateInput(t))} placeholder="DD/MM/AA" placeholderTextColor={colors.placeholder} keyboardType="number-pad" maxLength={8} />
             <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={saveUpdate}>
@@ -408,15 +526,116 @@ export function WeightLogger() {
           </View>
         </View>
       </Modal>
+      <Modal
+  visible={assignExerciseModal}
+  transparent
+  animationType="fade"
+  onRequestClose={() => setAssignExerciseModal(false)}
+>
+  <View
+    style={[
+      styles.modalBg,
+      { backgroundColor: colors.modalBg }
+    ]}
+  >
+    <View
+      style={[
+        styles.modal,
+        { backgroundColor: colors.card }
+      ]}
+    >
+      <TouchableOpacity
+        onPress={() => setAssignExerciseModal(false)}
+        style={{ marginBottom: 12 }}
+      >
+        <MaterialCommunityIcons
+          name="arrow-left"
+          size={24}
+          color={colors.text}
+        />
+      </TouchableOpacity>
+
+      <Text
+        style={{
+          fontSize: 24,
+          fontWeight: "bold",
+          color: colors.text,
+          marginBottom: 16
+        }}
+      >
+        Mover ejercicio a categoría
+      </Text>
+
+      <Text
+        style={{
+          color: colors.textSecondary,
+          marginBottom: 12
+        }}
+      >
+        {selectedExerciseToAssign}
+      </Text>
+
+      <TouchableOpacity
+        style={[
+          styles.categoryOption,
+          { backgroundColor: colors.background }
+        ]}
+        onPress={() =>
+          assignExerciseToCategory(
+            selectedExerciseToAssign,
+            ""
+          )
+        }
+      >
+        <Text style={{ color: colors.text }}>
+          Sin categoría
+        </Text>
+      </TouchableOpacity>
+
+      {categories.map(cat => (
+        <TouchableOpacity
+          key={cat}
+          style={[
+            styles.categoryOption,
+            { backgroundColor: colors.background }
+          ]}
+          onPress={() =>
+            assignExerciseToCategory(
+              selectedExerciseToAssign,
+              cat
+            )
+          }
+        >
+          <Text style={{ color: colors.text }}>
+            {cat}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  </View>
+</Modal>
 
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { padding: 12, marginBottom: 10, borderRadius: 8 },
+  card: { padding: 12, marginBottom: 2, borderRadius: 8 },
   button: { padding: 10, borderRadius: 6, alignItems: "center" },
   title: { fontSize: 18, fontWeight: "bold", marginBottom: 10 },
   modalBg: { flex: 1, justifyContent: "center", padding: 20 },
   modal: { padding: 15, borderRadius: 10 },
+  categoryHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 2,
+  },
+  categoryOption: {
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
 });
