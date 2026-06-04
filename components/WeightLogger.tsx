@@ -123,6 +123,7 @@ export function WeightLogger() {
   const [editReps, setEditReps] = useState("");
   const [editDate, setEditDate] = useState("");
   const [newWeight, setNewWeight] = useState("");
+  const [editExercise, setEditExercise] = useState("");
   const [newReps, setNewReps] = useState("");
   const [newDate, setNewDate] = useState(todaySpanish());
 
@@ -223,6 +224,7 @@ export function WeightLogger() {
 
   const openEdit = (entry: WeightEntry) => {
     setSelected(entry);
+    setEditExercise(entry.exercise);
     setEditWeight(entry.weight.toString());
     setEditReps(entry.reps?.toString() || "1");
     setEditDate(toSpanish(entry.date));
@@ -233,7 +235,7 @@ export function WeightLogger() {
     if (!selected) return;
     const isoDate = toISO(editDate);
     if (!isoDate) return;
-    save(entries.map(e => e.id === selected.id ? { ...e, weight: parseFloat(editWeight), reps: parseInt(editReps) || 1, date: isoDate } : e));
+    save(entries.map(e => e.id === selected.id ? { ...e,   exercise: editExercise.trim(), weight: parseFloat(editWeight), reps: parseInt(editReps) || 1, date: isoDate } : e));
     setEditModal(false);
   };
 
@@ -496,6 +498,13 @@ export function WeightLogger() {
             <TouchableOpacity onPress={() => setEditModal(false)} style={{ marginBottom: 10 }}>
               <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
+            <TextInput
+            style={inputStyle}
+            value={editExercise}
+            onChangeText={setEditExercise}
+            placeholder="Nombre del ejercicio"
+            placeholderTextColor={colors.placeholder}
+          />
             <View style={{ flexDirection: "row", width: "100%" }}>
               <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginRight: 4 }]} value={editWeight} onChangeText={setEditWeight} keyboardType="numeric" placeholder="Peso (kg)" placeholderTextColor={colors.placeholder} />
               <TextInput style={[inputStyle, { flex: 1, minWidth: 0, marginLeft: 4 }]} value={editReps} onChangeText={setEditReps} keyboardType="number-pad" placeholder="Reps" placeholderTextColor={colors.placeholder} />
