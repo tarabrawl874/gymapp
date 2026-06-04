@@ -2,8 +2,8 @@
   "expo": {
     "name": "E2GYM",
     "slug": "e2-gym",
-    "version": "1.0.8",
-    "note":"nuevas animaciones de completado de rutina y fuego de racha",
+    "version": "1.1.0",
+    "note":"metido de las anteriores actualizaciones etiquetas y agregado editar ejercicios de los pesos ya existentes",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
